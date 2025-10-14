@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "Proxy server to use TestDriver.ai with any LLM API (Z.ai, OpenAI, Anthropic)",
   "main": "server.js",
+  "bin": {
+    "testui": "./bin/testui",
+    "context": "./bin/context"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
@@ -37,7 +41,8 @@
     "axios": "^1.6.2",
     "dotenv": "^16.3.1",
     "winston": "^3.11.0",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "selenium-webdriver": "^4.16.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

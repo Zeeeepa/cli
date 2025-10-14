@@ -8,6 +8,28 @@
 
 ## Quick Start
 
+### 🌍 **Global Installation (Recommended)**
+Install once, use anywhere on your system:
+
+```bash
+# Clone and install
+git clone https://github.com/Zeeeepa/cli.git
+cd cli/testdriver-proxy
+npm install
+npm link  # Registers global commands
+
+# Configure
+cp .env.example .env
+# Edit .env with your API key
+```
+
+Now use **from any directory**:
+```bash
+testui "click all buttons, login with demo@test.com"
+context  # View current page elements
+```
+
+### 📦 **Local Installation**
 ```bash
 # Install dependencies
 npm install
@@ -19,6 +41,36 @@ cp .env.example .env
 # Start server
 npm start
 ```
+
+## 🌍 Global Commands
+
+After `npm link`, use these commands from **anywhere**:
+
+### **`testui` - Natural Language Testing**
+```bash
+# Execute tests with natural language
+testui "click all buttons"
+testui "login with demo@test.com and password TestPass123"
+testui "add 3 tasks and verify they appear"
+testui "fill registration form and submit"
+```
+
+### **`context` - UI Context Retrieval**
+```bash
+# Get current page context
+context
+
+# Get context from specific URL
+context http://localhost:4000
+
+# Shows:
+# - Page title and URL
+# - All visible buttons
+# - All input fields
+# - Interactive elements
+```
+
+---
 
 ## 🚀 One-Command Deployment & Testing
 

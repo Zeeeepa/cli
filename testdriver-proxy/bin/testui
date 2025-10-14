@@ -1,0 +1,41 @@
+#!/usr/bin/env node
+
+const { spawn, exec } = require('child_process');
+const path = require('path');
+const fs = require('fs');
+
+const INSTALL_DIR = path.join(__dirname, '..');
+const EXECUTE_SCRIPT = path.join(INSTALL_DIR, 'execute-test.sh');
+
+const colors = {
+  reset: '\x1b[0m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  cyan: '\x1b[36m'
+};
+
+function log(color, msg) {
+  console.log(colors[color] + msg + colors.reset);
+}
+
+if (process.argv.length < 3) {
+  log('cyan', '\nTestUI - Natural Language UI Testing\n');
+  log('yellow', 'Usage:');
+  log('cyan', '  testui "click all buttons, login with email"\n');
+  log('yellow', 'Examples:');
+  log('cyan', '  testui "login with demo@test.com"');
+  log('cyan', '  testui "add 3 tasks and verify"');
+  log('cyan', '  testui "fill form and submit"\n');
+  process.exit(0);
+}
+
+const testInput = process.argv.slice(2).join(' ');
+log('cyan', '\n🎬 Executing: ' + testInput + '\n');
+
+const child = spawn('bash', [EXECUTE_SCRIPT, testInput], {
+  cwd: INSTALL_DIR,
+  stdio: 'inherit'
+});
+
+child.on('exit', (code) => process.exit(code));
