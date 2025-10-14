@@ -10,6 +10,7 @@
     "test:live": "./tests/scripts/run_live_tests.sh",
     "validate": "./start-validation.sh",
     "deploy": "./deploy-and-test.sh",
+    "execute": "./execute-test.sh",
     "docker:build": "docker build -t testdriver-proxy .",
     "docker:run": "docker run -p 8080:8080 --env-file .env testdriver-proxy",
     "docker:compose:up": "docker-compose up -d",

@@ -22,6 +22,31 @@ npm start
 
 ## 🚀 One-Command Deployment & Testing
 
+### **🎯 End-to-End Execution (Natural Language)** ⭐ NEW!
+```bash
+npm run execute "Login with demo@testdriver.ai, add 3 tasks, verify they appear"
+```
+
+**The complete integrated system:**
+- ✅ Starts all services automatically
+- ✅ Parses natural language into steps
+- ✅ Executes in real browser (Selenium)
+- ✅ Captures screenshots at each step
+- ✅ Retrieves UI context automatically
+- ✅ Generates detailed HTML report
+- ✅ Handles cleanup
+
+**Example commands:**
+```bash
+npm run execute "Click login button, type email, submit form"
+npm run execute "Navigate to dashboard, add task, verify it appears"
+npm run execute "Fill out registration form and submit"
+```
+
+Report saved to: `execution-reports/execution_TIMESTAMP.html`
+
+---
+
 ### **Interactive Validation (Manual Testing)**
 ```bash
 npm run validate
