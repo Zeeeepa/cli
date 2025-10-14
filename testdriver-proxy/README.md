@@ -20,22 +20,32 @@ cp .env.example .env
 npm start
 ```
 
-## 🚀 One-Command PR Validation
+## 🚀 One-Command Deployment & Testing
 
-For comprehensive PR validation with interactive dashboard:
-
+### **Interactive Validation (Manual Testing)**
 ```bash
 npm run validate
 ```
 
-This will:
-- ✅ Start proxy server (port 8080)
-- ✅ Start test UI application (port 4000)  
-- ✅ Launch validation dashboard (port 5000)
-- ✅ Run health checks
-- ✅ Display all access URLs
+Launches interactive dashboard at **http://localhost:5000** with:
+- ✅ Real-time service monitoring
+- ✅ One-click endpoint testing
+- ✅ Component validation checklist
+- ✅ Visual test results
 
-Then open **http://localhost:5000** in your browser for interactive testing!
+### **Automated Testing (AI-Powered)**
+```bash
+npm run deploy
+```
+
+Runs complete automated test suite:
+- ✅ Deploys all services automatically
+- ✅ Auto-discovers UI features
+- ✅ Tests all endpoints with AI
+- ✅ Generates professional HTML report
+- ✅ Validates all components
+
+Report saved to: `test-reports/test_report_TIMESTAMP.html`
 
 ## Features
 
