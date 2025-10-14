@@ -20,6 +20,23 @@ cp .env.example .env
 npm start
 ```
 
+## 🚀 One-Command PR Validation
+
+For comprehensive PR validation with interactive dashboard:
+
+```bash
+npm run validate
+```
+
+This will:
+- ✅ Start proxy server (port 8080)
+- ✅ Start test UI application (port 4000)  
+- ✅ Launch validation dashboard (port 5000)
+- ✅ Run health checks
+- ✅ Display all access URLs
+
+Then open **http://localhost:5000** in your browser for interactive testing!
+
 ## Features
 
 - ✅ Multi-provider AI support (Z.ai, OpenAI, Anthropic)
@@ -100,4 +117,3 @@ MIT License
 - 🧪 [Testing Guide](./DOCUMENTATION.md#testing)
 - 🚀 [Deployment Guide](./DOCUMENTATION.md#deployment)
 - 🐛 [Troubleshooting](./DOCUMENTATION.md#troubleshooting)
-

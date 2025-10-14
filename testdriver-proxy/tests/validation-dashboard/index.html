@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TestDriver Proxy - PR Validation Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .status-card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .status-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        }
+
+        .status-card h3 {
+            color: #333;
+            font-size: 1.3em;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-indicator {
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.checking {
+            background: #fbbf24;
+        }
+
+        .status-indicator.healthy {
+            background: #10b981;
+        }
+
+        .status-indicator.error {
+            background: #ef4444;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .status-details {
+            color: #666;
+            font-size: 0.95em;
+            line-height: 1.6;
+        }
+
+        .test-section {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+
+        .test-section h2 {
+            color: #333;
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .test-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .test-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 20px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .test-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+        }
+
+        .test-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .test-button .emoji {
+            font-size: 1.5em;
+        }
+
+        .test-result {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+            border-left: 4px solid #667eea;
+            display: none;
+        }
+
+        .test-result.show {
+            display: block;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .test-result.success {
+            border-left-color: #10b981;
+            background: #d1fae5;
+        }
+
+        .test-result.error {
+            border-left-color: #ef4444;
+            background: #fee2e2;
+        }
+
+        .test-result pre {
+            margin: 10px 0 0 0;
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 0.9em;
+        }
+
+        .quick-links {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .link-card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            text-decoration: none;
+            color: #333;
+            transition: all 0.3s;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .link-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        }
+
+        .link-card h3 {
+            color: #667eea;
+            font-size: 1.3em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .link-card p {
+            color: #666;
+            line-height: 1.6;
+        }
+
+        .link-card .url {
+            font-family: 'Courier New', monospace;
+            background: #f3f4f6;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.9em;
+            color: #667eea;
+        }
+
+        .component-check {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .component-name {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .component-status {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 600;
+        }
+
+        .component-status.pass {
+            background: #d1fae5;
+            color: #059669;
+        }
+
+        .component-status.fail {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        .component-status.checking {
+            background: #fef3c7;
+            color: #d97706;
+        }
+
+        .run-all-button {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 20px 40px;
+            font-size: 1.2em;
+            font-weight: 700;
+            cursor: pointer;
+            margin-bottom: 20px;
+            width: 100%;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+            transition: all 0.3s;
+        }
+
+        .run-all-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+        }
+
+        .run-all-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .footer {
+            text-align: center;
+            color: white;
+            padding: 20px;
+            margin-top: 40px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🚀 TestDriver Proxy - PR Validation Dashboard</h1>
+            <p>Comprehensive component validation and interactive testing environment</p>
+        </div>
+
+        <!-- Status Grid -->
+        <div class="status-grid">
+            <div class="status-card">
+                <h3>
+                    <span class="status-indicator checking" id="proxy-indicator"></span>
+                    Proxy Server
+                </h3>
+                <div class="status-details" id="proxy-status">
+                    Checking status...
+                </div>
+            </div>
+
+            <div class="status-card">
+                <h3>
+                    <span class="status-indicator checking" id="testapp-indicator"></span>
+                    Test Application
+                </h3>
+                <div class="status-details" id="testapp-status">
+                    Checking status...
+                </div>
+            </div>
+
+            <div class="status-card">
+                <h3>
+                    <span class="status-indicator checking" id="api-indicator"></span>
+                    API Endpoints
+                </h3>
+                <div class="status-details" id="api-status">
+                    Checking status...
+                </div>
+            </div>
+
+            <div class="status-card">
+                <h3>
+                    <span class="status-indicator checking" id="config-indicator"></span>
+                    Configuration
+                </h3>
+                <div class="status-details" id="config-status">
+                    Checking status...
+                </div>
+            </div>
+        </div>
+
+        <!-- Component Validation -->
+        <div class="test-section">
+            <h2>📋 Component Validation</h2>
+            <button class="run-all-button" onclick="runAllValidation()" id="run-all-btn">
+                ▶️ Run Complete Validation
+            </button>
+            
+            <div id="component-checks">
+                <!-- Will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Interactive Testing -->
+        <div class="test-section">
+            <h2>🧪 Interactive Endpoint Testing</h2>
+            <p style="color: #666; margin-bottom: 20px;">
+                Click any button below to test an endpoint with real data. Results will appear below each button.
+            </p>
+
+            <div class="test-buttons">
+                <button class="test-button" onclick="testInput()">
+                    <span class="emoji">💬</span>
+                    <span>Test /input</span>
+                    <span style="font-size: 0.8em; opacity: 0.8;">Natural Language</span>
+                </button>
+
+                <button class="test-button" onclick="testGenerate()">
+                    <span class="emoji">🎯</span>
+                    <span>Test /generate</span>
+                    <span style="font-size: 0.8em; opacity: 0.8;">Test Scenarios</span>
+                </button>
+
+                <button class="test-button" onclick="testAssert()">
+                    <span class="emoji">✅</span>
+                    <span>Test /assert</span>
+                    <span style="font-size: 0.8em; opacity: 0.8;">Assertions</span>
+                </button>
+
+                <button class="test-button" onclick="testError()">
+                    <span class="emoji">🔧</span>
+                    <span>Test /error</span>
+                    <span style="font-size: 0.8em; opacity: 0.8;">Error Recovery</span>
+                </button>
+
+                <button class="test-button" onclick="testCheck()">
+                    <span class="emoji">🔍</span>
+                    <span>Test /check</span>
+                    <span style="font-size: 0.8em; opacity: 0.8;">Task Verification</span>
+                </button>
+            </div>
+
+            <div id="test-results">
+                <!-- Test results will appear here -->
+            </div>
+        </div>
+
+        <!-- Quick Links -->
+        <div class="test-section">
+            <h2>🔗 Quick Access</h2>
+            <div class="quick-links">
+                <a href="http://localhost:4000" target="_blank" class="link-card">
+                    <h3>🧪 Test Application</h3>
+                    <p>Interactive login and dashboard for manual testing</p>
+                    <div class="url">http://localhost:4000</div>
+                </a>
+
+                <a href="http://localhost:8080/health" target="_blank" class="link-card">
+                    <h3>🔌 Proxy Health</h3>
+                    <p>Check proxy server health and configuration</p>
+                    <div class="url">http://localhost:8080/health</div>
+                </a>
+
+                <a href="http://localhost:8080" target="_blank" class="link-card">
+                    <h3>📚 API Documentation</h3>
+                    <p>View complete API endpoint documentation</p>
+                    <div class="url">http://localhost:8080</div>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>💡 <strong>Tip:</strong> Press Ctrl+C in your terminal to stop all services</p>
+        <p style="margin-top: 10px; opacity: 0.8;">TestDriver Proxy v1.0.0 - PR Validation Dashboard</p>
+    </div>
+
+    <script>
+        // Configuration
+        const PROXY_URL = 'http://localhost:8080';
+        const TEST_APP_URL = 'http://localhost:4000';
+
+        // Check services on load
+        window.addEventListener('load', () => {
+            checkAllServices();
+        });
+
+        // Service health checks
+        async function checkAllServices() {
+            await checkProxyServer();
+            await checkTestApp();
+            await checkAPIEndpoints();
+            await checkConfiguration();
+        }
+
+        async function checkProxyServer() {
+            try {
+                const response = await fetch(`${PROXY_URL}/health`);
+                const data = await response.json();
+                
+                document.getElementById('proxy-indicator').className = 'status-indicator healthy';
+                document.getElementById('proxy-status').innerHTML = `
+                    <strong>Status:</strong> ${data.status}<br>
+                    <strong>Provider:</strong> ${data.provider}<br>
+                    <strong>Model:</strong> ${data.model}<br>
+                    <strong>Version:</strong> ${data.version}
+                `;
+            } catch (error) {
+                document.getElementById('proxy-indicator').className = 'status-indicator error';
+                document.getElementById('proxy-status').innerHTML = `
+                    <strong>Error:</strong> Cannot connect to proxy server<br>
+                    <span style="color: #dc2626;">Please ensure the server is running on port 8080</span>
+                `;
+            }
+        }
+
+        async function checkTestApp() {
+            try {
+                const response = await fetch(TEST_APP_URL);
+                if (response.ok) {
+                    document.getElementById('testapp-indicator').className = 'status-indicator healthy';
+                    document.getElementById('testapp-status').innerHTML = `
+                        <strong>Status:</strong> Running<br>
+                        <strong>Port:</strong> 4000<br>
+                        <strong>Features:</strong> Login, Dashboard, Tasks
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('testapp-indicator').className = 'status-indicator error';
+                document.getElementById('testapp-status').innerHTML = `
+                    <strong>Error:</strong> Cannot connect to test app<br>
+                    <span style="color: #dc2626;">Please ensure the test app is running on port 4000</span>
+                `;
+            }
+        }
+
+        async function checkAPIEndpoints() {
+            const endpoints = ['/health', '/'];
+            let workingCount = 0;
+
+            for (const endpoint of endpoints) {
+                try {
+                    const response = await fetch(`${PROXY_URL}${endpoint}`);
+                    if (response.ok) workingCount++;
+                } catch (error) {
+                    // Endpoint not working
+                }
+            }
+
+            if (workingCount === endpoints.length) {
+                document.getElementById('api-indicator').className = 'status-indicator healthy';
+                document.getElementById('api-status').innerHTML = `
+                    <strong>Status:</strong> All endpoints responding<br>
+                    <strong>Checked:</strong> ${endpoints.length} endpoints<br>
+                    <strong>Working:</strong> ${workingCount}/${endpoints.length}
+                `;
+            } else {
+                document.getElementById('api-indicator').className = 'status-indicator error';
+                document.getElementById('api-status').innerHTML = `
+                    <strong>Status:</strong> Some endpoints failing<br>
+                    <strong>Working:</strong> ${workingCount}/${endpoints.length}<br>
+                    <span style="color: #dc2626;">Check proxy server logs</span>
+                `;
+            }
+        }
+
+        async function checkConfiguration() {
+            try {
+                const response = await fetch(`${PROXY_URL}/health`);
+                const data = await response.json();
+                
+                const hasProvider = data.provider && data.provider !== 'none';
+                const hasModel = data.model && data.model !== 'none';
+
+                if (hasProvider && hasModel) {
+                    document.getElementById('config-indicator').className = 'status-indicator healthy';
+                    document.getElementById('config-status').innerHTML = `
+                        <strong>Status:</strong> Configured<br>
+                        <strong>Provider:</strong> ${data.provider}<br>
+                        <strong>Model:</strong> ${data.model}
+                    `;
+                } else {
+                    document.getElementById('config-indicator').className = 'status-indicator error';
+                    document.getElementById('config-status').innerHTML = `
+                        <strong>Status:</strong> Incomplete configuration<br>
+                        <span style="color: #dc2626;">Please check .env file</span>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('config-indicator').className = 'status-indicator error';
+                document.getElementById('config-status').innerHTML = `
+                    <strong>Error:</strong> Cannot verify configuration
+                `;
+            }
+        }
+
+        // Component validation
+        const components = [
+            { name: 'Proxy Server Port', check: async () => {
+                const response = await fetch(`${PROXY_URL}/health`);
+                return response.ok;
+            }},
+            { name: 'Test App Port', check: async () => {
+                const response = await fetch(TEST_APP_URL);
+                return response.ok;
+            }},
+            { name: 'API Provider Config', check: async () => {
+                const response = await fetch(`${PROXY_URL}/health`);
+                const data = await response.json();
+                return data.provider && data.provider !== 'none';
+            }},
+            { name: 'Model Config', check: async () => {
+                const response = await fetch(`${PROXY_URL}/health`);
+                const data = await response.json();
+                return data.model && data.model !== 'none';
+            }},
+            { name: 'Health Endpoint', check: async () => {
+                const response = await fetch(`${PROXY_URL}/health`);
+                return response.ok;
+            }},
+            { name: 'Root Endpoint', check: async () => {
+                const response = await fetch(PROXY_URL);
+                return response.ok;
+            }}
+        ];
+
+        async function runAllValidation() {
+            const btn = document.getElementById('run-all-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Running validation...';
+
+            const container = document.getElementById('component-checks');
+            container.innerHTML = '';
+
+            for (const component of components) {
+                const checkDiv = document.createElement('div');
+                checkDiv.className = 'component-check';
+                checkDiv.innerHTML = `
+                    <span class="component-name">${component.name}</span>
+                    <span class="component-status checking">Checking...</span>
+                `;
+                container.appendChild(checkDiv);
+
+                try {
+                    const passed = await component.check();
+                    const statusSpan = checkDiv.querySelector('.component-status');
+                    statusSpan.className = `component-status ${passed ? 'pass' : 'fail'}`;
+                    statusSpan.textContent = passed ? '✅ PASS' : '❌ FAIL';
+                } catch (error) {
+                    const statusSpan = checkDiv.querySelector('.component-status');
+                    statusSpan.className = 'component-status fail';
+                    statusSpan.textContent = '❌ ERROR';
+                }
+
+                await new Promise(resolve => setTimeout(resolve, 200)); // Small delay for UX
+            }
+
+            btn.disabled = false;
+            btn.innerHTML = '▶️ Run Complete Validation';
+        }
+
+        // Endpoint testing functions
+        async function testInput() {
+            showLoading('input');
+            try {
+                const response = await fetch(`${PROXY_URL}/api/1.0.0/testdriver/input`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        input: "Click the login button and type my email"
+                    })
+                });
+                const data = await response.json();
+                showResult('input', true, 'Natural Language → YAML conversion successful', data);
+            } catch (error) {
+                showResult('input', false, 'Test failed', error.message);
+            }
+        }
+
+        async function testGenerate() {
+            showLoading('generate');
+            try {
+                const response = await fetch(`${PROXY_URL}/api/1.0.0/testdriver/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        prompt: "Generate test scenarios for a login page"
+                    })
+                });
+                const data = await response.json();
+                showResult('generate', true, 'Test scenario generation successful', data);
+            } catch (error) {
+                showResult('generate', false, 'Test failed', error.message);
+            }
+        }
+
+        async function testAssert() {
+            showLoading('assert');
+            try {
+                const response = await fetch(`${PROXY_URL}/api/1.0.0/testdriver/assert`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        expect: "Login button should be visible",
+                        screenshot: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+                    })
+                });
+                const data = await response.json();
+                showResult('assert', true, 'Assertion verification successful', data);
+            } catch (error) {
+                showResult('assert', false, 'Test failed', error.message);
+            }
+        }
+
+        async function testError() {
+            showLoading('error');
+            try {
+                const response = await fetch(`${PROXY_URL}/api/1.0.0/testdriver/error`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        error: "Button not found",
+                        screenshot: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+                        context: "Attempting to click submit button"
+                    })
+                });
+                const data = await response.json();
+                showResult('error', true, 'Error recovery suggestions generated', data);
+            } catch (error) {
+                showResult('error', false, 'Test failed', error.message);
+            }
+        }
+
+        async function testCheck() {
+            showLoading('check');
+            try {
+                const response = await fetch(`${PROXY_URL}/api/1.0.0/testdriver/check`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        instruction: "Verify login form appears",
+                        screenshot_before: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+                        screenshot_after: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYGD4DwABBAEAW9JFSAAAAABJRU5ErkJggg=="
+                    })
+                });
+                const data = await response.json();
+                showResult('check', true, 'Task verification successful', data);
+            } catch (error) {
+                showResult('check', false, 'Test failed', error.message);
+            }
+        }
+
+        function showLoading(testName) {
+            const resultDiv = document.createElement('div');
+            resultDiv.id = `result-${testName}`;
+            resultDiv.className = 'test-result show';
+            resultDiv.innerHTML = `
+                <strong>Testing ${testName}...</strong>
+                <span class="loading"></span>
+            `;
+            
+            // Remove previous result if exists
+            const existing = document.getElementById(`result-${testName}`);
+            if (existing) existing.remove();
+            
+            document.getElementById('test-results').prepend(resultDiv);
+        }
+
+        function showResult(testName, success, message, data) {
+            const resultDiv = document.getElementById(`result-${testName}`);
+            resultDiv.className = `test-result show ${success ? 'success' : 'error'}`;
+            resultDiv.innerHTML = `
+                <strong>${success ? '✅' : '❌'} ${message}</strong>
+                <pre>${JSON.stringify(data, null, 2)}</pre>
+            `;
+        }
+    </script>
+</body>
+</html>
+
