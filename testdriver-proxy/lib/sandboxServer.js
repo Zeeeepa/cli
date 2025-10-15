@@ -42,6 +42,7 @@ class SandboxServer {
               logger.info('✅ Client authenticated');
               break;
 
+            case 'create':
             case 'connect':
               if (!authenticated) {
                 response.success = false;
@@ -141,4 +142,3 @@ class SandboxServer {
 }
 
 module.exports = { SandboxServer };
-
