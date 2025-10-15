@@ -223,11 +223,14 @@ async function startTestUI(options) {
   log('cyan', '║  TestUI - AI Agent Test Execution         ║');
   log('cyan', '╚════════════════════════════════════════════╝\n');
   
-  // Validate API key
-  if (!process.env.ANTHROPIC_API_KEY && !process.env.API_KEY) {
-    log('red', '❌ ANTHROPIC_API_KEY environment variable not set!');
+  // Validate API key (check multiple possible environment variables)
+  const apiKey = process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN || process.env.API_KEY;
+  if (!apiKey) {
+    log('red', '❌ ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN environment variable not set!');
     log('yellow', '\n📝 Set your API key:');
-    log('cyan', '   export ANTHROPIC_API_KEY="your-api-key"\n');
+    log('cyan', '   export ANTHROPIC_API_KEY="your-api-key"');
+    log('cyan', '   # or');
+    log('cyan', '   export ANTHROPIC_AUTH_TOKEN="your-auth-token"\n');
     process.exit(1);
   }
   
@@ -245,7 +248,7 @@ async function startTestUI(options) {
       env: { 
         ...process.env, 
         PORT: String(proxyPort),
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || process.env.API_KEY
+        ANTHROPIC_API_KEY: apiKey
       },
       stdio: ['ignore', 'pipe', 'pipe']
     });
