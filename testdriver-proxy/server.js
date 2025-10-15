@@ -28,9 +28,9 @@ dotenv.config();
 const config = {
   port: parseInt(process.env.PORT || '3000'),
   apiProvider: process.env.API_PROVIDER || 'zai',
-  apiKey: process.env.API_KEY,
+  apiKey: process.env.API_KEY || process.env.ANTHROPIC_API_KEY,
   apiBaseUrl: process.env.API_BASE_URL || 'https://api.z.ai/api/anthropic',
-  model: process.env.MODEL || 'glm-4v-plus',
+  model: process.env.MODEL || 'glm-4.5V',
   maxTokens: parseInt(process.env.MAX_TOKENS || '4000'),
   temperature: parseFloat(process.env.TEMPERATURE || '0.7'),
   debug: process.env.DEBUG === 'true'
