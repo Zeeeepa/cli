@@ -145,7 +145,8 @@ async function generateYAMLFromPrompt(prompt, proxyPort, existingYamlPath = null
       const yamlSteps = yamlMatch[1];
       
       // Wrap in proper TestDriver format
-      const yamlContent = `name: ${existingYamlPath ? `Enhanced Test: ${path.basename(existingYamlPath)}` : 'Generated Test from Prompt'}
+      const yamlContent = `version: "1"
+name: ${existingYamlPath ? `Enhanced Test: ${path.basename(existingYamlPath)}` : 'Generated Test from Prompt'}
 description: ${prompt}
 steps:
 ${yamlSteps}`;
