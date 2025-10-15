@@ -349,7 +349,7 @@ Be concise. Focus on the exact task requested.`;
 
     // Call LLM with GLM-4.6 for YAML generation (text-only, faster)
     const response = await callLLM(messages, systemPrompt, stream, config.generationModel);
-    logger.info(\`YAML generation using model: \${config.generationModel}\`);
+    logger.info(`YAML generation using model: ${config.generationModel}`);
     const textContent = extractTextContent(response);
 
     logger.debug('LLM Response:', textContent);
@@ -969,7 +969,8 @@ const server = app.listen(config.port, () => {
   ║                                                                ║
   ║  Server URL:    http://localhost:${config.port.toString().padEnd(40)}║
   ║  API Provider:  ${config.apiProvider.padEnd(47)}║
-  ║  Model:         ${config.model.padEnd(47)}║
+  ║  Gen Model:     ${config.generationModel.padEnd(47)}║
+  ║  Vision Model:  ${config.visionModel.padEnd(47)}║
   ║  Max Tokens:    ${config.maxTokens.toString().padEnd(47)}║
   ║                                                                ║
   ╠════════════════════════════════════════════════════════════════╣
