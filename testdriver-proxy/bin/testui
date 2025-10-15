@@ -133,13 +133,22 @@ async function generateYAMLFromPrompt(prompt, proxyPort, existingYamlPath = null
       headers: { 'Content-Type': 'application/json' }
     });
     
-    if (response.data && response.data.commands) {
-      // Convert commands to YAML format
-      const yamlContent = yaml.dump({
-        name: existingYamlPath ? `Enhanced Test: ${path.basename(existingYamlPath)}` : 'Generated Test from Prompt',
-        description: prompt,
-        steps: response.data.commands
-      });
+    if (response.data && response.data.markdown) {
+      // Extract YAML from markdown code block
+      const markdown = response.data.markdown;
+      const yamlMatch = markdown.match(/```yaml\n([\s\S]*?)\n```/);
+      
+      if (!yamlMatch) {
+        throw new Error('No YAML code block found in response');
+      }
+      
+      const yamlSteps = yamlMatch[1];
+      
+      // Wrap in proper TestDriver format
+      const yamlContent = `name: ${existingYamlPath ? `Enhanced Test: ${path.basename(existingYamlPath)}` : 'Generated Test from Prompt'}
+description: ${prompt}
+steps:
+${yamlSteps}`;
       
       // Save to temp file
       if (!fs.existsSync(TEMP_DIR)) {
