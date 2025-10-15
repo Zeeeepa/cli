@@ -1,0 +1,150 @@
+#!/usr/bin/env node
+
+const { spawn } = require('child_process');
+const path = require('path');
+const http = require('http');
+
+const INSTALL_DIR = path.join(__dirname, '..');
+const TEST_APP_DIR = path.join(INSTALL_DIR, 'tests', 'ui', 'test-app');
+const SERVER_SCRIPT = path.join(INSTALL_DIR, 'server.js');
+
+const colors = {
+  reset: '\x1b[0m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  cyan: '\x1b[36m',
+  blue: '\x1b[34m'
+};
+
+function log(color, msg) {
+  console.log(colors[color] + msg + colors.reset);
+}
+
+function checkPort(port) {
+  return new Promise((resolve) => {
+    const server = http.createServer();
+    server.once('error', () => resolve(true)); // Port in use = service running
+    server.once('listening', () => {
+      server.close();
+      resolve(false); // Port free = service not running
+    });
+    server.listen(port);
+  });
+}
+
+async function startTestUI(testInput) {
+  log('cyan', '\n╔════════════════════════════════════════════╗');
+  log('cyan', '║  TestUI - AI Agent Test Execution         ║');
+  log('cyan', '╚════════════════════════════════════════════╝\n');
+  
+  // Check if test app exists
+  const testAppServer = path.join(TEST_APP_DIR, 'server.js');
+  const fs = require('fs');
+  if (!fs.existsSync(testAppServer)) {
+    log('red', '❌ Test app not found at: ' + testAppServer);
+    process.exit(1);
+  }
+  
+  log('blue', '📋 Test Command: ' + testInput);
+  log('yellow', '\n⏳ Starting test environment...\n');
+  
+  // Start test app on port 4000
+  log('cyan', '1️⃣  Starting test UI app (port 4000)...');
+  const testApp = spawn('node', [testAppServer], {
+    cwd: TEST_APP_DIR,
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  
+  // Wait for test app to start
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  
+  const testAppReady = await checkPort(4000);
+  if (!testAppReady) {
+    log('red', '❌ Failed to start test app on port 4000');
+    testApp.kill();
+    process.exit(1);
+  }
+  log('green', '✅ Test app ready at http://localhost:4000');
+  
+  // Start proxy server on port 9876
+  log('cyan', '\n2️⃣  Starting proxy server (port 9876)...');
+  const proxyServer = spawn('node', [SERVER_SCRIPT], {
+    cwd: INSTALL_DIR,
+    env: { ...process.env, PORT: '9876', API_KEY: process.env.API_KEY || 'test' },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  
+  // Wait for proxy to start
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
+  const proxyReady = await checkPort(9876);
+  if (!proxyReady) {
+    log('red', '❌ Failed to start proxy server on port 9876');
+    testApp.kill();
+    proxyServer.kill();
+    process.exit(1);
+  }
+  log('green', '✅ Proxy server ready at http://localhost:9876');
+  
+  // Execute test via TestDriver CLI
+  log('cyan', '\n3️⃣  Executing test with AI agent...\n');
+  log('blue', '─────────────────────────────────────────────');
+  
+  const testDriver = spawn('npx', [
+    'testdriverai', 'run',
+    '--url', 'http://localhost:4000',
+    '--prompt', testInput
+  ], {
+    env: { 
+      ...process.env, 
+      TD_API_ROOT: 'http://localhost:9876',
+      API_KEY: process.env.API_KEY || 'test'
+    },
+    stdio: 'inherit'
+  });
+  
+  testDriver.on('exit', (code) => {
+    log('blue', '\n─────────────────────────────────────────────');
+    log('yellow', '\n🧹 Cleaning up...');
+    testApp.kill();
+    proxyServer.kill();
+    
+    if (code === 0) {
+      log('green', '\n✅ Test completed successfully!\n');
+    } else {
+      log('red', '\n❌ Test failed with exit code: ' + code + '\n');
+    }
+    process.exit(code);
+  });
+  
+  // Handle cleanup on interrupt
+  process.on('SIGINT', () => {
+    log('yellow', '\n\n⚠️  Interrupted! Cleaning up...');
+    testApp.kill();
+    proxyServer.kill();
+    process.exit(130);
+  });
+}
+
+if (process.argv.length < 3) {
+  log('cyan', '\n╔════════════════════════════════════════════╗');
+  log('cyan', '║  TestUI - AI Agent Test Execution         ║');
+  log('cyan', '╚════════════════════════════════════════════╝\n');
+  log('yellow', 'Usage:');
+  log('cyan', '  testui "your natural language test command"\n');
+  log('yellow', 'Examples:');
+  log('cyan', '  testui "login with demo@testdriver.ai"');
+  log('cyan', '  testui "click all buttons and verify"');
+  log('cyan', '  testui "fill form and submit"\n');
+  log('yellow', 'Environment:');
+  log('cyan', '  API_KEY     - Your Z.ai or Anthropic API key');
+  log('cyan', '  TD_API_ROOT - Proxy server URL (auto-configured)\n');
+  process.exit(0);
+}
+
+const testInput = process.argv.slice(2).join(' ');
+startTestUI(testInput).catch(err => {
+  log('red', '\n❌ Error: ' + err.message);
+  process.exit(1);
+});
