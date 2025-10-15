@@ -1,328 +1,196 @@
-# TestDriver.ai Proxy Server
+# TestUI - AI-Powered Test Automation
 
-> **A production-ready proxy server enabling TestDriver.ai to work with any LLM API**
-
-[![Tests](https://img.shields.io/badge/tests-passing-brightgreen)]()
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)]()
-[![Node](https://img.shields.io/badge/node-%3E%3D16-green)]()
-
-## ✨ What's New
-
-### Production-Ready Enhancements
-
-**🛡️ Robustness & Reliability:**
-- ✅ Automatic retry with exponential backoff for transient errors
-- ✅ Enhanced error handling with clear, actionable messages
-- ✅ Graceful shutdown handling (SIGTERM/SIGINT)
-- ✅ Port conflict detection with helpful resolution steps
-- ✅ Request ID tracking for debugging
-- ✅ Comprehensive timeout handling
-
-**🔒 Security & Performance:**
-- ✅ Rate limiting (100 requests/15min per IP, configurable)
-- ✅ Request validation middleware
-- ✅ Memory usage monitoring
-- ✅ Structured logging with Winston
-- ✅ Health check endpoints (basic + full API connectivity test)
-
-**🧪 Testing & Validation:**
-- ✅ Comprehensive test suite for Anthropic/Z.ai integration
-- ✅ Automated testui command validation
-- ✅ Quick validation script (`./quick-test.sh`)
-- ✅ Performance benchmarking tools
-
-**📚 Documentation:**
-- ✅ Detailed troubleshooting guide (TROUBLESHOOTING.md)
-- ✅ Configuration examples for all providers
-- ✅ Common issues and solutions
-- ✅ Advanced debugging techniques
+AI-powered test automation using natural language. Powered by glm-4.5V vision model.
 
 ## 🚀 Quick Start
 
-### Step 1: Clone & Install
 ```bash
-git clone https://github.com/Zeeeepa/cli.git
+# Clone and install
+git clone <repository-url>
+cd cli/testdriver-proxy
+npm install
+
+# Set your API key
+export ANTHROPIC_API_KEY="your-api-key-here"
+
+# Run your first test!
+testui --prompt="test login on https://example.com"
+```
+
+## 📦 Installation
+
+```bash
 cd cli/testdriver-proxy
 npm install
 ```
 
-### Step 2: Get Z.ai API Key (Free)
-1. Visit [https://z.ai](https://z.ai) and sign up
-2. Get your API key from the dashboard
-3. Copy it for the next step
+The `testui` command is now available globally via npm bin link!
 
-### Step 3: Configure Environment
+## 🎯 Usage
+
+### Natural Language Testing
+
 ```bash
-# Set your Z.ai API key as ANTHROPIC_API_KEY
-export ANTHROPIC_API_KEY="your-zai-api-key-here"
-
-# Optional: Add to your shell profile for persistence
-echo 'export ANTHROPIC_API_KEY="your-zai-api-key-here"' >> ~/.bashrc  # or ~/.zshrc
-source ~/.bashrc  # or ~/.zshrc
+# AI generates YAML test from your prompt and runs it
+testui --prompt="test login on https://myapp.com"
+testui --prompt="click all buttons and verify they work"
+testui "navigate to google.com and search for AI"  # Shorthand
 ```
 
-### Step 4: Test It!
+### Run Existing YAML Tests
+
 ```bash
-# Run a natural language test
-testui PROMPT="login with demo@testdriver.ai"
-
-# Or run a test file
-testui TEST="tests/example.yaml"
-
-# Test against your own app
-testui APP="http://your-app:8080" PROMPT="click the signup button"
+# Execute pre-written YAML test files
+testui --file="tests/checkout-flow.yaml"
+testui --file="tests/login-test.yaml"
 ```
 
-## 📖 Usage Examples
+### Enhance Existing YAML
 
-### Basic Testing (Auto-starts test app on port 4000)
 ```bash
-testui PROMPT="click all buttons and verify"
-testui PROMPT="login with test@example.com"
-testui PROMPT="fill out the contact form"
+# Combine both to enhance existing tests
+testui --file="tests/login.yaml" --prompt="also verify logout works"
+testui --file="tests/checkout.yaml" --prompt="add promo code validation"
 ```
 
-### Test File Execution
-```bash
-testui TEST="path/to/test.yaml"
-testui TEST="tests/login-flow.yaml"
+## 🔧 How It Works
+
+1. **Proxy Server**: Starts automatically on port 9876 (configurable)
+2. **AI Processing**: Sends prompt to glm-4.5V via `/api/v1/testdriver/input`
+3. **YAML Generation**: AI generates structured test commands
+4. **Auto-Execute**: Runs the generated test with TestDriver.ai
+5. **Cleanup**: Automatically cleans up temp files
+
+### TD_API_ROOT
+
+Automatically configured to point to the proxy server:
+```
+TD_API_ROOT=http://localhost:{proxyPort}
 ```
 
-### Testing External Apps
+## ⚙️ Configuration
+
+### Environment Variables
+
 ```bash
-testui APP="http://localhost:3000" PROMPT="test the checkout flow"
-testui APP="https://myapp.com" PROMPT="verify the homepage loads"
+# Required
+export ANTHROPIC_API_KEY="your-api-key"
+
+# Optional
+export TESTUI_PROXY_PORT=9876      # Custom proxy port
+export MODEL=glm-4.5V               # Override AI model
 ```
 
-### Positional Arguments (Shorthand)
+### Custom Port
+
+If port 9876 is in use:
 ```bash
-testui "click the signup button"  # Same as PROMPT="..."
+TESTUI_PROXY_PORT=3000 testui --prompt="test my app"
 ```
 
-## 🌍 Global Commands
+## 📝 Examples
 
-After `npm link`, use these commands from **anywhere**:
+### Test Any Website
 
-### **`testui` - Natural Language Testing**
 ```bash
-# Execute tests with natural language
-testui "click all buttons"
-testui "login with demo@test.com and password TestPass123"
-testui "add 3 tasks and verify they appear"
-testui "fill registration form and submit"
+testui --prompt="go to reddit.com and verify homepage loads"
+testui --prompt="test checkout flow on shopify.com/demo"
+testui --prompt="verify all links on example.com are working"
 ```
 
-### **`context` - UI Context Retrieval**
+### Complex Testing
+
 ```bash
-# Get current page context
-context
-
-# Get context from specific URL
-context http://localhost:4000
-
-# Shows:
-# - Page title and URL
-# - All visible buttons
-# - All input fields
-# - Interactive elements
+testui --prompt="test login with user@example.com on https://myapp.com, then navigate to dashboard and verify profile loads"
 ```
+
+### Enhance Existing Tests
+
+```bash
+# Start with a base test
+testui --file="tests/basic-login.yaml" \
+      --prompt="add 2FA verification and check session timeout"
+```
+
+## 🎨 Features
+
+- ✅ **Natural Language**: Write tests in plain English
+- ✅ **URL Aware**: Include URLs directly in prompts
+- ✅ **Auto-Cleanup**: Temp files cleaned automatically
+- ✅ **Vision AI**: glm-4.5V model for UI understanding
+- ✅ **Flexible**: Enhance existing tests or create new ones
+- ✅ **Smart Proxy**: Automatic TD_API_ROOT configuration
+
+## 🏗️ Architecture
+
+```
+testui command
+    ↓
+Starts proxy server (port 9876)
+    ↓
+Prompt → /api/v1/testdriver/input
+    ↓
+glm-4.5V generates YAML
+    ↓
+TestDriver.ai runs test
+    ↓
+Results + auto-cleanup
+```
+
+## 🔍 Available Endpoints
+
+The proxy server provides 7 AI-powered endpoints:
+
+1. `/api/:version/testdriver/input` - Natural language → YAML
+2. `/api/:version/testdriver/error` - Error recovery
+3. `/api/:version/testdriver/check` - Task verification
+4. `/api/:version/testdriver/generate` - Test generation
+5. `/api/:version/testdriver/assert` - Assertions
+6. `/api/:version/testdriver/hover/text` - Text finding
+7. `/api/:version/testdriver/hover/image` - Image matching
+
+## 🐛 Troubleshooting
+
+### Port Already in Use
+
+```bash
+# Use a different port
+TESTUI_PROXY_PORT=8080 testui --prompt="test my app"
+```
+
+### API Key Not Set
+
+```bash
+export ANTHROPIC_API_KEY="your-key-here"
+testui --help  # Verify it's set
+```
+
+### Test Failing
+
+```bash
+# Check logs
+testui --prompt="your test" 2>&1 | tee test.log
+```
+
+## 📚 Model Configuration
+
+Default model: **glm-4.5V**
+
+Override if needed:
+```bash
+MODEL=glm-4-plus testui --prompt="test login"
+```
+
+## 🔗 Links
+
+- [TestDriver.ai Documentation](https://testdriver.ai)
+- [Z.ai API](https://api.z.ai)
+
+## 📄 License
+
+MIT
 
 ---
 
-## 🚀 One-Command Deployment & Testing
+**Ready to test smarter, not harder?** 🚀
 
-### **🎯 End-to-End Execution (Natural Language)** ⭐ NEW!
-```bash
-npm run execute "Login with demo@testdriver.ai, add 3 tasks, verify they appear"
-```
-
-**The complete integrated system:**
-- ✅ Starts all services automatically
-- ✅ Parses natural language into steps
-- ✅ Executes in real browser (Selenium)
-- ✅ Captures screenshots at each step
-- ✅ Retrieves UI context automatically
-- ✅ Generates detailed HTML report
-- ✅ Handles cleanup
-
-**Example commands:**
-```bash
-npm run execute "Click login button, type email, submit form"
-npm run execute "Navigate to dashboard, add task, verify it appears"
-npm run execute "Fill out registration form and submit"
-```
-
-Report saved to: `execution-reports/execution_TIMESTAMP.html`
-
----
-
-### **Interactive Validation (Manual Testing)**
-```bash
-npm run validate
-```
-
-Launches interactive dashboard at **http://localhost:5000** with:
-- ✅ Real-time service monitoring
-- ✅ One-click endpoint testing
-- ✅ Component validation checklist
-- ✅ Visual test results
-
-### **Automated Testing (AI-Powered)**
-```bash
-npm run deploy
-```
-
-Runs complete automated test suite:
-- ✅ Deploys all services automatically
-- ✅ Auto-discovers UI features
-- ✅ Tests all endpoints with AI
-- ✅ Generates professional HTML report
-- ✅ Validates all components
-
-Report saved to: `test-reports/test_report_TIMESTAMP.html`
-
-## Features
-
-- ✅ Multi-provider AI support (Z.ai, OpenAI, Anthropic)
-- ✅ Vision-based UI testing with screenshot analysis
-- ✅ Natural language → YAML test command conversion
-- ✅ AI-powered error recovery & debugging
-- ✅ Automatic test scenario generation
-
-## Documentation
-
-📚 **[View Complete Documentation](./DOCUMENTATION.md)** 📚
-
-The comprehensive documentation includes:
-- Full API reference
-- Configuration guide
-- Testing instructions
-- Deployment options
-- Codebase analysis
-- Troubleshooting guide
-
-## Test Organization
-
-All tests are organized in the `tests/` directory:
-
-```
-tests/
-├── test_config.py           # Unit tests: Configuration
-├── test_models.py           # Unit tests: Data models
-├── test_proxy.py            # Unit tests: Proxy logic
-├── integration/             # Integration tests
-├── scripts/                 # Test runner scripts
-└── ui/                      # UI tests and test application
-```
-
-## Quick Test
-
-```bash
-# Run basic tests
-npm test
-
-# Run live integration tests
-cd tests/scripts
-./run_live_tests.sh
-```
-
-## Project Structure
-
-```
-testdriver-proxy/
-├── server.js              # Main Express.js server (830 lines)
-├── DOCUMENTATION.md       # Complete documentation (800+ lines)
-├── package.json           # Dependencies
-├── Dockerfile             # Docker configuration
-├── docker-compose.yml     # Docker Compose
-└── tests/                 # All tests organized by type
-    ├── *.py              # Unit tests
-    ├── integration/      # Integration tests
-    ├── scripts/          # Test runners
-    └── ui/               # UI tests
-```
-
-## 🧪 Testing & Validation
-
-### Quick Validation
-Run a quick syntax and functionality check:
-```bash
-./quick-test.sh
-```
-
-### Comprehensive Test Suite
-```bash
-# Start the server first
-npm start &
-
-# Run all integration tests
-node tests/test-anthropic-zai.js
-
-# Run testui command tests
-bash tests/test-testui-command.sh
-
-# Test against custom server
-TEST_SERVER=http://my-server.com:3000 bash tests/test-testui-command.sh
-```
-
-### Health Checks
-```bash
-# Basic health check (fast)
-curl http://localhost:3000/health
-
-# Full health check (includes API connectivity test)
-curl http://localhost:3000/health/full
-```
-
-### Test Coverage
-- ✅ Server startup and configuration
-- ✅ API endpoint availability
-- ✅ Error handling and retry logic
-- ✅ Rate limiting functionality
-- ✅ Request/response format validation
-- ✅ Memory usage monitoring
-- ✅ Concurrent request handling
-- ✅ Timeout configuration
-- ✅ Health check endpoints
-
-## API Endpoints
-
-### Health & Status
-- `GET /health` - Quick health check (no API call)
-- `GET /health/full` - Deep health check with API connectivity test
-- `GET /` - API information and available endpoints
-
-### TestDriver Integration
-- `POST /api/:version/testdriver/input` - Natural language → YAML
-- `POST /api/:version/testdriver/generate` - Test generation
-- `POST /api/:version/testdriver/error` - Error recovery
-- `POST /api/:version/testdriver/check` - Task verification
-- `POST /api/:version/testdriver/assert` - Assertions
-- `POST /api/:version/testdriver/hover/text` - Text coordinate finding
-- `POST /api/:version/testdriver/hover/image` - Image template matching
-
-## License
-
-MIT License
-
-## 🔧 Troubleshooting
-
-Having issues? Check out our comprehensive troubleshooting guide:
-
-**[📖 TROUBLESHOOTING.md](./TROUBLESHOOTING.md)**
-
-Common issues covered:
-- Port conflicts and resolution
-- API authentication failures
-- Connection timeouts
-- Rate limiting
-- Permission errors
-- Performance optimization
-- Debug logging
-
-## Links
-
-- 📚 [Complete Documentation](./DOCUMENTATION.md)
-- 🔧 [Troubleshooting Guide](./TROUBLESHOOTING.md)
-- 🧪 [Testing Guide](./DOCUMENTATION.md#testing)
-- 🚀 [Deployment Guide](./DOCUMENTATION.md#deployment)

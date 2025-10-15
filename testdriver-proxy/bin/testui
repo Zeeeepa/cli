@@ -31,18 +31,15 @@ function parseArgs() {
   const args = process.argv.slice(2);
   const parsed = {
     prompt: null,
-    testFile: null,
-    appUrl: null
+    testFile: null
   };
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg.startsWith('--prompt=') || arg.startsWith('PROMPT=')) {
-      parsed.prompt = arg.split('=')[1].replace(/^["']|["']$/g, '');
-    } else if (arg.startsWith('--file=') || arg.startsWith('TEST=') || arg.startsWith('FILE=')) {
-      parsed.testFile = arg.split('=')[1].replace(/^["']|["']$/g, '');
-    } else if (arg.startsWith('--app=') || arg.startsWith('APP=')) {
-      parsed.appUrl = arg.split('=')[1].replace(/^["']|["']$/g, '');
+    if (arg.startsWith('--prompt=')) {
+      parsed.prompt = arg.split('=').slice(1).join('=').replace(/^["']|["']$/g, '');
+    } else if (arg.startsWith('--file=')) {
+      parsed.testFile = arg.split('=').slice(1).join('=').replace(/^["']|["']$/g, '');
     } else if (!arg.startsWith('-') && !parsed.prompt && !parsed.testFile) {
       // Default positional argument is prompt
       parsed.prompt = arg;
@@ -57,37 +54,43 @@ function showHelp() {
   log('cyan', '║  TestUI - AI Agent Test Execution         ║');
   log('cyan', '╚════════════════════════════════════════════╝\n');
   
+  console.log('Installation:');
+  console.log('  git clone <repo-url>');
+  console.log('  cd cli/testdriver-proxy');
+  console.log('  npm install');
+  console.log('  # testui command is now available globally!\n');
+  
   console.log('Usage:');
-  console.log('  testui --prompt="your natural language test"');
+  console.log('  testui --prompt="natural language test instructions"');
   console.log('  testui --file="path/to/test.yaml"');
-  console.log('  testui "natural language shorthand"\n');
+  console.log('  testui --prompt="..." --file="test.yaml"  # Enhance existing YAML\n');
   
   console.log('Examples:');
-  console.log('  # Natural language prompt (generates YAML via AI)');
-  console.log('  testui --prompt="click the login button and verify"');
-  console.log('  testui "click all buttons"  # Shorthand\n');
+  console.log('  # Natural language (AI generates YAML + runs)');
+  console.log('  testui --prompt="test login on https://myapp.com"');
+  console.log('  testui --prompt="click all buttons and verify they work"');
+  console.log('  testui "navigate to google.com and search for AI"  # Shorthand\n');
   
-  console.log('  # Direct YAML file execution');
-  console.log('  testui --file="tests/login-test.yaml"');
-  console.log('  testui FILE="tests/checkout.yaml"\n');
+  console.log('  # Run existing YAML test');
+  console.log('  testui --file="tests/checkout-flow.yaml"\n');
   
-  console.log('  # With external app');
-  console.log('  testui --app="http://localhost:3000" --prompt="test checkout"\n');
+  console.log('  # Enhance existing YAML with additional prompt');
+  console.log('  testui --file="tests/login.yaml" --prompt="also verify logout"\n');
   
   console.log('How it works:');
-  console.log('  --prompt: Sends prompt to /api/:version/testdriver/input');
-  console.log('            Generates YAML automatically, then runs it');
-  console.log('  --file:   Runs existing YAML test file directly\n');
+  console.log('  --prompt: Sends context to AI (glm-4.5V)');
+  console.log('            → Generates YAML test');
+  console.log('            → Auto-runs the test');
+  console.log('  --file:   Runs existing YAML directly');
+  console.log('  Both:     AI enhances existing YAML with prompt context\n');
   
   console.log('Environment Variables:');
   console.log('  ANTHROPIC_API_KEY    - Your API key (required)');
   console.log('  TESTUI_PROXY_PORT    - Proxy server port (default: 9876)');
-  console.log('  APP_URL              - Override default test app URL');
-  console.log('  TD_API_ROOT          - Auto-set to proxy URL\n');
+  console.log('  MODEL                - Override model (default: glm-4.5V)\n');
   
-  console.log('Model Configuration:');
-  console.log('  Default Model: glm-4.5V');
-  console.log('  Override with: MODEL=your-model testui ...\n');
+  console.log('Note: URLs can be included directly in prompts!');
+  console.log('      No separate --app flag needed.\n');
   
   process.exit(0);
 }
@@ -104,13 +107,23 @@ function checkPort(port) {
   });
 }
 
-async function generateYAMLFromPrompt(prompt, proxyPort) {
+async function generateYAMLFromPrompt(prompt, proxyPort, existingYamlPath = null) {
   log('cyan', '\n🤖 Generating test YAML from prompt...');
   log('magenta', `   📝 "${prompt}"\n`);
   
+  let existingYamlContent = null;
+  if (existingYamlPath) {
+    log('blue', `   📄 Enhancing existing YAML: ${existingYamlPath}`);
+    existingYamlContent = fs.readFileSync(existingYamlPath, 'utf8');
+  }
+  
   try {
+    const contextPrompt = existingYamlContent 
+      ? `${prompt}\n\nExisting YAML test:\n${existingYamlContent}`
+      : prompt;
+      
     const response = await axios.post(`http://localhost:${proxyPort}/api/v1/testdriver/input`, {
-      input: prompt,
+      input: contextPrompt,
       screenshot: '',
       mousePosition: { x: 0, y: 0 },
       activeWindow: 'TestUI',
@@ -123,7 +136,7 @@ async function generateYAMLFromPrompt(prompt, proxyPort) {
     if (response.data && response.data.commands) {
       // Convert commands to YAML format
       const yamlContent = yaml.dump({
-        name: 'Generated Test from Prompt',
+        name: existingYamlPath ? `Enhanced Test: ${path.basename(existingYamlPath)}` : 'Generated Test from Prompt',
         description: prompt,
         steps: response.data.commands
       });
@@ -167,43 +180,15 @@ async function startTestUI(options) {
     process.exit(1);
   }
   
-  const startOwnApp = !options.appUrl;
-  let testApp, proxyServer;
+  let proxyServer;
   let generatedTestFile = null;
   
   // Determine proxy port (allow override via environment)
   const proxyPort = parseInt(process.env.TESTUI_PROXY_PORT || process.env.PORT || '9876');
   
   try {
-    // Start test app if needed
-    if (startOwnApp) {
-      const testAppServer = path.join(TEST_APP_DIR, 'server.js');
-      if (!fs.existsSync(testAppServer)) {
-        log('red', '❌ Test app not found at: ' + testAppServer);
-        process.exit(1);
-      }
-      
-      log('cyan', '1️⃣  Starting test UI app (port 4000)...');
-      testApp = spawn('node', [testAppServer], {
-        cwd: TEST_APP_DIR,
-        stdio: ['ignore', 'pipe', 'pipe']
-      });
-      
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const testAppReady = await checkPort(4000);
-      if (!testAppReady) {
-        log('red', '❌ Failed to start test app on port 4000');
-        testApp.kill();
-        process.exit(1);
-      }
-      log('green', '✅ Test app ready at http://localhost:4000');
-    } else {
-      log('blue', `🌐 Using external app: ${options.appUrl}`);
-    }
-    
     // Start proxy server
-    log('cyan', `\n2️⃣  Starting proxy server (port ${proxyPort})...`);
+    log('cyan', `1️⃣  Starting proxy server (port ${proxyPort})...`);
     proxyServer = spawn('node', [SERVER_SCRIPT], {
       cwd: INSTALL_DIR,
       env: { 
@@ -219,7 +204,7 @@ async function startTestUI(options) {
     const proxyReady = await checkPort(proxyPort);
     if (!proxyReady) {
       log('red', `❌ Failed to start proxy server on port ${proxyPort}`);
-      if (testApp) testApp.kill();
+      log('yellow', `   Port ${proxyPort} might be in use. Try TESTUI_PROXY_PORT=<other-port>`);
       proxyServer.kill();
       process.exit(1);
     }
@@ -228,30 +213,34 @@ async function startTestUI(options) {
     // Set TD_API_ROOT to proxy server URL
     const tdApiRoot = `http://localhost:${proxyPort}`;
     process.env.TD_API_ROOT = tdApiRoot;
-    log('blue', `🔗 TD_API_ROOT set to: ${tdApiRoot}`);
+    log('blue', `🔗 TD_API_ROOT → ${tdApiRoot}\n`);
     
     // Determine test execution method
-    const appUrl = options.appUrl || 'http://localhost:4000';
     let testFilePath;
     
-    if (options.testFile) {
-      // Direct YAML file execution
-      log('cyan', `\n3️⃣  Running test from file: ${options.testFile}\n`);
+    if (options.prompt && options.testFile) {
+      // Both prompt and file: enhance existing YAML
+      log('cyan', '2️⃣  Enhancing existing YAML with prompt...\n');
+      testFilePath = await generateYAMLFromPrompt(options.prompt, proxyPort, options.testFile);
+      generatedTestFile = testFilePath;
+    } else if (options.testFile) {
+      // File only: direct execution
+      log('cyan', `2️⃣  Running test from file: ${options.testFile}\n`);
       testFilePath = options.testFile;
     } else if (options.prompt) {
-      // Generate YAML from prompt using /input endpoint
-      log('cyan', '\n3️⃣  Processing natural language prompt...\n');
+      // Prompt only: generate and run
+      log('cyan', '2️⃣  Processing natural language prompt...\n');
       testFilePath = await generateYAMLFromPrompt(options.prompt, proxyPort);
       generatedTestFile = testFilePath;
     } else {
       log('red', '❌ No test specified! Provide --prompt or --file parameter.');
-      if (testApp) testApp.kill();
+      log('yellow', '   Run: testui --help for usage examples\n');
       proxyServer.kill();
       process.exit(1);
     }
     
-    log('blue', '\n─────────────────────────────────────────────');
-    log('cyan', `\n🚀 Executing test: ${path.basename(testFilePath)}\n`);
+    log('blue', '─────────────────────────────────────────────');
+    log('cyan', `\n3️⃣  Executing test: ${path.basename(testFilePath)}\n`);
     log('blue', '─────────────────────────────────────────────\n');
     
     // Run testdriverai with the YAML file
@@ -267,7 +256,6 @@ async function startTestUI(options) {
     testDriver.on('exit', (code) => {
       log('blue', '\n─────────────────────────────────────────────');
       log('yellow', '\n🧹 Cleaning up...');
-      if (testApp) testApp.kill();
       proxyServer.kill();
       
       // Clean up generated test file
@@ -291,7 +279,6 @@ async function startTestUI(options) {
     // Handle cleanup on interrupt
     process.on('SIGINT', () => {
       log('yellow', '\n\n⚠️  Interrupted! Cleaning up...');
-      if (testApp) testApp.kill();
       proxyServer.kill();
       if (generatedTestFile && fs.existsSync(generatedTestFile)) {
         try {
@@ -306,7 +293,6 @@ async function startTestUI(options) {
   } catch (error) {
     log('red', '\n❌ Error: ' + error.message);
     if (error.stack) log('yellow', error.stack);
-    if (testApp) testApp.kill();
     if (proxyServer) proxyServer.kill();
     if (generatedTestFile && fs.existsSync(generatedTestFile)) {
       try {
