@@ -29,21 +29,35 @@ function log(color, msg) {
 
 function parseArgs() {
   const args = process.argv.slice(2);
+  const fullInput = args.join(' ');
+  
   const parsed = {
     prompt: null,
-    testFile: null
+    testFile: null,
+    isUpgrade: false
   };
 
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg.startsWith('--prompt=')) {
-      parsed.prompt = arg.split('=').slice(1).join('=').replace(/^["']|["']$/g, '');
-    } else if (arg.startsWith('--file=')) {
-      parsed.testFile = arg.split('=').slice(1).join('=').replace(/^["']|["']$/g, '');
-    } else if (!arg.startsWith('-') && !parsed.prompt && !parsed.testFile) {
-      // Default positional argument is prompt
-      parsed.prompt = arg;
-    }
+  // Check if input contains file path patterns
+  const filePathRegex = /(?:upgrade|enhance|improve|modify)\s+([^\s]+\.ya?ml)/i;
+  const standaloneFileRegex = /^([^\s]+\.ya?ml)$/;
+  
+  const upgradeMatch = fullInput.match(filePathRegex);
+  const standaloneMatch = fullInput.match(standaloneFileRegex);
+  
+  if (upgradeMatch) {
+    // Format: "upgrade /path/to/test.yaml to include robust testing"
+    parsed.testFile = upgradeMatch[1];
+    parsed.isUpgrade = true;
+    // Extract the instruction part after the file path
+    const afterFile = fullInput.substring(fullInput.indexOf(upgradeMatch[1]) + upgradeMatch[1].length).trim();
+    parsed.prompt = afterFile || 'enhance with robust testing and error handling';
+  } else if (standaloneMatch) {
+    // Format: "/path/to/test.yaml" (just run the file)
+    parsed.testFile = standaloneMatch[1];
+    parsed.prompt = null;
+  } else {
+    // Everything else is a prompt
+    parsed.prompt = fullInput;
   }
 
   return parsed;
@@ -54,28 +68,23 @@ function showHelp() {
   log('cyan', '║  TestUI - AI Agent Test Execution         ║');
   log('cyan', '╚════════════════════════════════════════════╝\n');
   
-  console.log('Installation:');
-  console.log('  git clone <repo-url>');
-  console.log('  cd cli/testdriver-proxy');
-  console.log('  npm install');
-  console.log('  # testui command is now available globally!\n');
+  console.log('TestUI uses natural language to generate and execute browser tests.\n');
   
   console.log('Usage:');
-  console.log('  testui --prompt="natural language test instructions"');
-  console.log('  testui --file="path/to/test.yaml"');
-  console.log('  testui --prompt="..." --file="test.yaml"  # Enhance existing YAML\n');
+  console.log('  testui "natural language instructions"\n');
   
-  console.log('Examples:');
-  console.log('  # Natural language (AI generates YAML + runs)');
-  console.log('  testui --prompt="test login on https://myapp.com"');
-  console.log('  testui --prompt="click all buttons and verify they work"');
-  console.log('  testui "navigate to google.com and search for AI"  # Shorthand\n');
+  console.log('Examples:\n');
   
-  console.log('  # Run existing YAML test');
-  console.log('  testui --file="tests/checkout-flow.yaml"\n');
+  console.log('  📝 Generate & run new test:');
+  console.log('  testui "go to google, search for analysis tools and get best UI tools"');
+  console.log('  testui "test login on myapp.com with user@test.com"\n');
   
-  console.log('  # Enhance existing YAML with additional prompt');
-  console.log('  testui --file="tests/login.yaml" --prompt="also verify logout"\n');
+  console.log('  ⬆️  Upgrade existing test:');
+  console.log('  testui "upgrade /home/l/test.yaml to include robust testing"');
+  console.log('  testui "enhance ./tests/login.yaml with error handling"\n');
+  
+  console.log('  ▶️  Run existing test file:');
+  console.log('  testui "./tests/checkout.yaml"\n');
   
   console.log('How it works:');
   console.log('  --prompt: Sends context to AI (glm-4.5V)');
@@ -107,20 +116,52 @@ function checkPort(port) {
   });
 }
 
-async function generateYAMLFromPrompt(prompt, proxyPort, existingYamlPath = null) {
+async function generateYAMLFromPrompt(prompt, proxyPort, existingYamlPath = null, isUpgrade = false) {
   log('cyan', '\n🤖 Generating test YAML from prompt...');
   log('magenta', `   📝 "${prompt}"\n`);
   
   let existingYamlContent = null;
   if (existingYamlPath) {
-    log('blue', `   📄 Enhancing existing YAML: ${existingYamlPath}`);
-    existingYamlContent = fs.readFileSync(existingYamlPath, 'utf8');
+    if (fs.existsSync(existingYamlPath)) {
+      log('blue', `   📄 ${isUpgrade ? 'Upgrading' : 'Enhancing'} existing YAML: ${existingYamlPath}`);
+      existingYamlContent = fs.readFileSync(existingYamlPath, 'utf8');
+    } else {
+      log('yellow', `   ⚠️  File not found: ${existingYamlPath}`);
+      log('yellow', '   Creating new test based on your instructions...\n');
+      existingYamlPath = null;
+    }
   }
   
   try {
-    const contextPrompt = existingYamlContent 
-      ? `${prompt}\n\nExisting YAML test:\n${existingYamlContent}`
-      : prompt;
+    let contextPrompt;
+    if (existingYamlContent) {
+      // Smart upgrade prompt for existing files
+      contextPrompt = `You are upgrading an existing TestDriver YAML test file.
+
+USER REQUEST: ${prompt}
+
+EXISTING TEST FILE:
+\`\`\`yaml
+${existingYamlContent}
+\`\`\`
+
+INSTRUCTIONS:
+1. Analyze the existing test structure carefully
+2. Keep all existing test steps unless they conflict with the upgrade request
+3. Add new steps or enhance existing ones based on the request
+4. If the request says "robust testing", add:
+   - Error handling steps
+   - Validation assertions
+   - Edge case testing
+   - Wait steps for stability
+5. Maintain the existing test flow and structure
+6. Output ONLY the complete upgraded YAML test (all steps, not just new ones)
+7. Use proper TestDriver YAML format
+
+Generate the COMPLETE upgraded test:`;
+    } else {
+      contextPrompt = prompt;
+    }
       
     const response = await axios.post(`http://localhost:${proxyPort}/api/v1/testdriver/input`, {
       input: contextPrompt,
@@ -129,7 +170,7 @@ async function generateYAMLFromPrompt(prompt, proxyPort, existingYamlPath = null
       activeWindow: 'TestUI',
       stream: false
     }, {
-      timeout: 30000,
+      timeout: 60000,  // Increased timeout for complex upgrades
       headers: { 'Content-Type': 'application/json' }
     });
     
@@ -229,10 +270,10 @@ async function startTestUI(options) {
     // Determine test execution method
     let testFilePath;
     
-    if (options.prompt && options.testFile) {
-      // Both prompt and file: enhance existing YAML
-      log('cyan', '2️⃣  Enhancing existing YAML with prompt...\n');
-      testFilePath = await generateYAMLFromPrompt(options.prompt, proxyPort, options.testFile);
+    if (options.testFile && options.prompt) {
+      // File + prompt: upgrade/enhance existing YAML
+      log('cyan', `2️⃣  ${options.isUpgrade ? 'Upgrading' : 'Enhancing'} existing YAML with prompt...\n`);
+      testFilePath = await generateYAMLFromPrompt(options.prompt, proxyPort, options.testFile, options.isUpgrade);
       generatedTestFile = testFilePath;
     } else if (options.testFile) {
       // File only: direct execution
@@ -244,7 +285,7 @@ async function startTestUI(options) {
       testFilePath = await generateYAMLFromPrompt(options.prompt, proxyPort);
       generatedTestFile = testFilePath;
     } else {
-      log('red', '❌ No test specified! Provide --prompt or --file parameter.');
+      log('red', '❌ No test specified! Provide a prompt or file path.');
       log('yellow', '   Run: testui --help for usage examples\n');
       proxyServer.kill();
       process.exit(1);
