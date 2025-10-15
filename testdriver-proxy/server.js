@@ -20,6 +20,8 @@ const path = require('path');
 const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 const { v4: uuidv4 } = require('uuid');
+const http = require('http');
+const WebSocket = require('ws');
 
 // Load environment variables
 dotenv.config();
@@ -959,7 +961,43 @@ app.use((err, req, res, next) => {
 // Start Server
 // ============================================================================
 
-const server = app.listen(config.port, () => {
+// Create HTTP server for WebSocket support
+const server = http.createServer(app);
+
+// Create WebSocket server
+const wss = new WebSocket.Server({ server });
+
+// WebSocket connection handler
+wss.on('connection', (ws) => {
+  logger.info('WebSocket client connected');
+  
+  ws.on('message', async (message) => {
+    try {
+      const data = JSON.parse(message.toString());
+      logger.debug(`WS message received: ${JSON.stringify(data)}`);
+      
+      // Handle TestDriver protocol messages
+      // For now, just echo back a success response
+      ws.send(JSON.stringify({
+        success: true,
+        message: 'TestDriver proxy WebSocket connected'
+      }));
+    } catch (error) {
+      logger.error(`WebSocket message error: ${error.message}`);
+      ws.send(JSON.stringify({ error: error.message }));
+    }
+  });
+  
+  ws.on('close', () => {
+    logger.info('WebSocket client disconnected');
+  });
+  
+  ws.on('error', (error) => {
+    logger.error(`WebSocket error: ${error.message}`);
+  });
+});
+
+server.listen(config.port, () => {
   logger.info(`
   ╔════════════════════════════════════════════════════════════════╗
   ║                                                                ║
