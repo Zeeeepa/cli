@@ -220,10 +220,9 @@ async function startTestUI(options) {
     }
     log('green', `✅ Proxy server ready at http://localhost:${proxyPort}`);
     
-    // Set TD_API_ROOT to proxy server URL
-    const tdApiRoot = `http://localhost:${proxyPort}`;
-    process.env.TD_API_ROOT = tdApiRoot;
-    log('blue', `🔗 TD_API_ROOT → ${tdApiRoot}\n`);
+    // Note: We do NOT set TD_API_ROOT since our proxy is for Anthropic API,
+    // not a TestDriver sandbox server. TestDriver will use its cloud service.
+    log('blue', `🔗 Proxy ready for Anthropic API calls\n`);
     
     // Determine test execution method
     let testFilePath;
@@ -254,10 +253,11 @@ async function startTestUI(options) {
     log('blue', '─────────────────────────────────────────────\n');
     
     // Run testdriverai with the YAML file
+    // Note: TestDriver will use ANTHROPIC_API_KEY from environment
     const testDriver = spawn('npx', ['--yes', 'testdriverai@latest', 'run', testFilePath], {
       env: { 
-        ...process.env, 
-        TD_API_ROOT: tdApiRoot,
+        ...process.env,
+        // TestDriver uses Anthropic API key for AI calls
         ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || process.env.API_KEY
       },
       stdio: 'inherit'
