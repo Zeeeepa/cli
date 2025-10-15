@@ -17,6 +17,9 @@ const cors = require('cors');
 const sharp = require('sharp');
 const fs = require('fs').promises;
 const path = require('path');
+const rateLimit = require('express-rate-limit');
+const { body, validationResult } = require('express-validator');
+const { v4: uuidv4 } = require('uuid');
 
 // Load environment variables
 dotenv.config();
@@ -55,10 +58,48 @@ const logger = winston.createLogger({
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
+// ============================================================================
+// Middleware
+// ============================================================================
+
+// Request ID tracking
+app.use((req, res, next) => {
+  req.id = uuidv4();
+  res.setHeader('X-Request-ID', req.id);
+  logger.info(`[${req.id}] ${req.method} ${req.path}`);
+  next();
+});
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+  handler: (req, res) => {
+    logger.warn(`[${req.id}] Rate limit exceeded for IP: ${req.ip}`);
+    res.status(429).json({ error: 'Too many requests, please try again later.' });
+  }
+});
+app.use('/api/', limiter);
+
+// CORS
 app.use(cors());
+
+// Body parsing
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Logging
 app.use(morgan('combined', { stream: { write: msg => logger.info(msg.trim()) } }));
+
+// Request timeout
+app.use((req, res, next) => {
+  req.setTimeout(120000); // 120 seconds
+  res.setTimeout(120000);
+  next();
+});
 
 // ============================================================================
 // Helper Functions
@@ -89,9 +130,9 @@ async function processScreenshot(base64Image) {
 }
 
 /**
- * Call the configured LLM API (Z.ai, OpenAI, Anthropic, etc.)
+ * Call the configured LLM API (Z.ai, OpenAI, Anthropic, etc.) with retry logic
  */
-async function callLLM(messages, systemPrompt, stream = false) {
+async function callLLM(messages, systemPrompt, stream = false, retries = 3) {
   const headers = {
     'Content-Type': 'application/json'
   };
@@ -135,21 +176,55 @@ async function callLLM(messages, systemPrompt, stream = false) {
 
   logger.debug('LLM Request:', { url, body: requestBody });
 
-  try {
-    const response = await axios.post(url, requestBody, { 
-      headers,
-      responseType: stream ? 'stream' : 'json',
-      timeout: 120000
-    });
-    
-    return response.data;
-  } catch (error) {
-    logger.error('LLM API Error:', {
-      status: error.response?.status,
-      data: error.response?.data,
-      message: error.message
-    });
-    throw error;
+  // Retry logic for transient errors
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const response = await axios.post(url, requestBody, { 
+        headers,
+        responseType: stream ? 'stream' : 'json',
+        timeout: 120000
+      });
+      
+      logger.debug(`LLM API call successful on attempt ${attempt}`);
+      return response.data;
+    } catch (error) {
+      const isRetryable = error.code === 'ECONNRESET' || 
+                          error.code === 'ETIMEDOUT' ||
+                          error.response?.status === 429 ||
+                          error.response?.status === 500 ||
+                          error.response?.status === 502 ||
+                          error.response?.status === 503;
+      
+      const isLastAttempt = attempt === retries;
+      
+      logger.error(`LLM API Error (attempt ${attempt}/${retries}):`, {
+        status: error.response?.status,
+        code: error.code,
+        data: error.response?.data,
+        message: error.message,
+        retryable: isRetryable
+      });
+      
+      if (isRetryable && !isLastAttempt) {
+        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000); // Exponential backoff, max 10s
+        logger.info(`Retrying LLM API call in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      
+      // Enhanced error message for common issues
+      if (error.response?.status === 401) {
+        throw new Error('API authentication failed. Please check your API key.');
+      } else if (error.response?.status === 429) {
+        throw new Error('Rate limit exceeded. Please try again later.');
+      } else if (error.code === 'ETIMEDOUT') {
+        throw new Error('Request timeout. The API took too long to respond.');
+      } else if (error.code === 'ECONNREFUSED') {
+        throw new Error('Connection refused. Please check the API URL.');
+      }
+      
+      throw error;
+    }
   }
 }
 
@@ -743,13 +818,93 @@ Output Format:
 // Health Check & Info Endpoints
 // ============================================================================
 
-app.get('/health', (req, res) => {
-  res.json({ 
+app.get('/health', async (req, res) => {
+  const startTime = Date.now();
+  const healthStatus = {
     status: 'healthy',
-    provider: config.apiProvider,
-    model: config.model,
-    version: '1.0.0'
-  });
+    timestamp: new Date().toISOString(),
+    version: '1.0.0',
+    uptime: process.uptime(),
+    environment: {
+      node: process.version,
+      platform: process.platform,
+      memory: {
+        used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+        total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+        external: Math.round(process.memoryUsage().external / 1024 / 1024),
+        unit: 'MB'
+      }
+    },
+    config: {
+      provider: config.apiProvider,
+      model: config.model,
+      apiBaseUrl: config.apiBaseUrl,
+      port: config.port
+    },
+    dependencies: {
+      apiEndpoint: { status: 'unknown', message: 'Not checked (use /health/full for deep check)' }
+    }
+  };
+
+  // Quick health check (no API call)
+  const responseTime = Date.now() - startTime;
+  healthStatus.responseTime = `${responseTime}ms`;
+  
+  res.json(healthStatus);
+});
+
+// Deep health check with API connectivity test
+app.get('/health/full', async (req, res) => {
+  const startTime = Date.now();
+  const healthStatus = {
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0',
+    uptime: process.uptime(),
+    environment: {
+      node: process.version,
+      platform: process.platform,
+      memory: {
+        used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+        total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+        external: Math.round(process.memoryUsage().external / 1024 / 1024),
+        unit: 'MB'
+      }
+    },
+    config: {
+      provider: config.apiProvider,
+      model: config.model,
+      apiBaseUrl: config.apiBaseUrl,
+      port: config.port
+    },
+    dependencies: {}
+  };
+
+  // Test API connectivity
+  try {
+    const testMessages = [{ role: 'user', content: 'Test connection - respond with OK' }];
+    const testStart = Date.now();
+    await callLLM(testMessages, null, false, 1); // Single retry for health check
+    const testTime = Date.now() - testStart;
+    
+    healthStatus.dependencies.apiEndpoint = {
+      status: 'healthy',
+      responseTime: `${testTime}ms`,
+      message: 'API endpoint is reachable and responding'
+    };
+  } catch (error) {
+    healthStatus.status = 'degraded';
+    healthStatus.dependencies.apiEndpoint = {
+      status: 'unhealthy',
+      error: error.message,
+      message: 'API endpoint is not reachable'
+    };
+  }
+
+  const responseTime = Date.now() - startTime;
+  healthStatus.responseTime = `${responseTime}ms`;
+  
+  res.json(healthStatus);
 });
 
 app.get('/', (req, res) => {
@@ -792,7 +947,7 @@ app.use((err, req, res, next) => {
 // Start Server
 // ============================================================================
 
-app.listen(config.port, () => {
+const server = app.listen(config.port, () => {
   logger.info(`
   ╔════════════════════════════════════════════════════════════════╗
   ║                                                                ║
@@ -825,6 +980,42 @@ app.listen(config.port, () => {
   
   logger.info('Proxy server is ready to receive requests');
   logger.info(`Test it: curl http://localhost:${config.port}/health`);
+});
+
+// Handle server startup errors
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    logger.error(`❌ Port ${config.port} is already in use`);
+    logger.error(`💡 Solutions:`);
+    logger.error(`   1. Stop the process using the port: lsof -ti:${config.port} | xargs kill`);
+    logger.error(`   2. Use a different port: PORT=8090 npm start`);
+    logger.error(`   3. Set PORT in .env file`);
+    process.exit(1);
+  } else if (error.code === 'EACCES') {
+    logger.error(`❌ Permission denied to bind to port ${config.port}`);
+    logger.error(`💡 Use a port >= 1024 or run with elevated permissions`);
+    process.exit(1);
+  } else {
+    logger.error('❌ Server startup error:', error);
+    process.exit(1);
+  }
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM received, shutting down gracefully');
+  server.close(() => {
+    logger.info('Server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  logger.info('SIGINT received, shutting down gracefully');
+  server.close(() => {
+    logger.info('Server closed');
+    process.exit(0);
+  });
 });
 
 module.exports = app;
