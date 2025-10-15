@@ -37,40 +37,66 @@
 - ✅ Common issues and solutions
 - ✅ Advanced debugging techniques
 
-## Quick Start
+## 🚀 Quick Start
 
-### 🌍 **Global Installation (Recommended)**
-Install once, use anywhere on your system:
-
+### Step 1: Clone & Install
 ```bash
-# Clone and install
 git clone https://github.com/Zeeeepa/cli.git
 cd cli/testdriver-proxy
 npm install
-npm link  # Registers global commands
-
-# Configure
-cp .env.example .env
-# Edit .env with your API key
 ```
 
-Now use **from any directory**:
+### Step 2: Get Z.ai API Key (Free)
+1. Visit [https://z.ai](https://z.ai) and sign up
+2. Get your API key from the dashboard
+3. Copy it for the next step
+
+### Step 3: Configure Environment
 ```bash
-testui "click all buttons, login with demo@test.com"
-context  # View current page elements
+# Set your Z.ai API key as ANTHROPIC_API_KEY
+export ANTHROPIC_API_KEY="your-zai-api-key-here"
+
+# Optional: Add to your shell profile for persistence
+echo 'export ANTHROPIC_API_KEY="your-zai-api-key-here"' >> ~/.bashrc  # or ~/.zshrc
+source ~/.bashrc  # or ~/.zshrc
 ```
 
-### 📦 **Local Installation**
+### Step 4: Test It!
 ```bash
-# Install dependencies
-npm install
+# Run a natural language test
+testui PROMPT="login with demo@testdriver.ai"
 
-# Configure API credentials
-cp .env.example .env
-# Edit .env with your API key
+# Or run a test file
+testui TEST="tests/example.yaml"
 
-# Start server
-npm start
+# Test against your own app
+testui APP="http://your-app:8080" PROMPT="click the signup button"
+```
+
+## 📖 Usage Examples
+
+### Basic Testing (Auto-starts test app on port 4000)
+```bash
+testui PROMPT="click all buttons and verify"
+testui PROMPT="login with test@example.com"
+testui PROMPT="fill out the contact form"
+```
+
+### Test File Execution
+```bash
+testui TEST="path/to/test.yaml"
+testui TEST="tests/login-flow.yaml"
+```
+
+### Testing External Apps
+```bash
+testui APP="http://localhost:3000" PROMPT="test the checkout flow"
+testui APP="https://myapp.com" PROMPT="verify the homepage loads"
+```
+
+### Positional Arguments (Shorthand)
+```bash
+testui "click the signup button"  # Same as PROMPT="..."
 ```
 
 ## 🌍 Global Commands

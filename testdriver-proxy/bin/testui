@@ -3,6 +3,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const http = require('http');
+const fs = require('fs');
 
 const INSTALL_DIR = path.join(__dirname, '..');
 const TEST_APP_DIR = path.join(INSTALL_DIR, 'tests', 'ui', 'test-app');
@@ -14,137 +15,217 @@ const colors = {
   green: '\x1b[32m',
   yellow: '\x1b[33m',
   cyan: '\x1b[36m',
-  blue: '\x1b[34m'
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m'
 };
 
 function log(color, msg) {
   console.log(colors[color] + msg + colors.reset);
 }
 
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const parsed = {
+    prompt: null,
+    testFile: null,
+    appUrl: null
+  };
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg.startsWith('PROMPT=')) {
+      parsed.prompt = arg.split('=')[1].replace(/^["']|["']$/g, '');
+    } else if (arg.startsWith('TEST=')) {
+      parsed.testFile = arg.split('=')[1].replace(/^["']|["']$/g, '');
+    } else if (arg.startsWith('APP=')) {
+      parsed.appUrl = arg.split('=')[1].replace(/^["']|["']$/g, '');
+    } else if (!arg.startsWith('-') && !parsed.prompt) {
+      // Default positional argument is prompt
+      parsed.prompt = arg;
+    }
+  }
+
+  return parsed;
+}
+
+function showHelp() {
+  log('cyan', '\n╔════════════════════════════════════════════╗');
+  log('cyan', '║  TestUI - AI Agent Test Execution         ║');
+  log('cyan', '╚════════════════════════════════════════════╝\n');
+  
+  console.log('Usage:');
+  console.log('  testui PROMPT="your natural language test"');
+  console.log('  testui TEST="path/to/test.yaml"');
+  console.log('  testui APP="http://your-app:4000" PROMPT="test instructions"\n');
+  
+  console.log('Examples:');
+  console.log('  testui PROMPT="login with demo@testdriver.ai"');
+  console.log('  testui TEST="tests/login.yaml"');
+  console.log('  testui "click all buttons"  # Positional prompt\n');
+  
+  console.log('Environment Variables:');
+  console.log('  ANTHROPIC_API_KEY  - Your Z.ai API key (required)');
+  console.log('  APP_URL           - Override default test app URL\n');
+  
+  process.exit(0);
+}
+
 function checkPort(port) {
   return new Promise((resolve) => {
     const server = http.createServer();
-    server.once('error', () => resolve(true)); // Port in use = service running
+    server.once('error', () => resolve(true));
     server.once('listening', () => {
       server.close();
-      resolve(false); // Port free = service not running
+      resolve(false);
     });
     server.listen(port);
   });
 }
 
-async function startTestUI(testInput) {
+async function startTestUI(options) {
   log('cyan', '\n╔════════════════════════════════════════════╗');
   log('cyan', '║  TestUI - AI Agent Test Execution         ║');
   log('cyan', '╚════════════════════════════════════════════╝\n');
   
-  // Check if test app exists
-  const testAppServer = path.join(TEST_APP_DIR, 'server.js');
-  const fs = require('fs');
-  if (!fs.existsSync(testAppServer)) {
-    log('red', '❌ Test app not found at: ' + testAppServer);
+  // Validate API key
+  if (!process.env.ANTHROPIC_API_KEY) {
+    log('red', '❌ ANTHROPIC_API_KEY environment variable not set!');
+    log('yellow', '\n📝 Set your Z.ai API key:');
+    log('cyan', '   export ANTHROPIC_API_KEY="your-zai-api-key"\n');
     process.exit(1);
   }
   
-  log('blue', '📋 Test Command: ' + testInput);
-  log('yellow', '\n⏳ Starting test environment...\n');
+  const startOwnApp = !options.appUrl;
+  let testApp, proxyServer;
   
-  // Start test app on port 4000
-  log('cyan', '1️⃣  Starting test UI app (port 4000)...');
-  const testApp = spawn('node', [testAppServer], {
-    cwd: TEST_APP_DIR,
-    stdio: ['ignore', 'pipe', 'pipe']
-  });
-  
-  // Wait for test app to start
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  
-  const testAppReady = await checkPort(4000);
-  if (!testAppReady) {
-    log('red', '❌ Failed to start test app on port 4000');
-    testApp.kill();
-    process.exit(1);
-  }
-  log('green', '✅ Test app ready at http://localhost:4000');
-  
-  // Start proxy server on port 9876
-  log('cyan', '\n2️⃣  Starting proxy server (port 9876)...');
-  const proxyServer = spawn('node', [SERVER_SCRIPT], {
-    cwd: INSTALL_DIR,
-    env: { ...process.env, PORT: '9876', API_KEY: process.env.API_KEY || 'test' },
-    stdio: ['ignore', 'pipe', 'pipe']
-  });
-  
-  // Wait for proxy to start
-  await new Promise(resolve => setTimeout(resolve, 2000));
-  
-  const proxyReady = await checkPort(9876);
-  if (!proxyReady) {
-    log('red', '❌ Failed to start proxy server on port 9876');
-    testApp.kill();
-    proxyServer.kill();
-    process.exit(1);
-  }
-  log('green', '✅ Proxy server ready at http://localhost:9876');
-  
-  // Execute test via TestDriver CLI
-  log('cyan', '\n3️⃣  Executing test with AI agent...\n');
-  log('blue', '─────────────────────────────────────────────');
-  
-  const testDriver = spawn('npx', [
-    'testdriverai', 'run',
-    '--url', 'http://localhost:4000',
-    '--prompt', testInput
-  ], {
-    env: { 
-      ...process.env, 
-      TD_API_ROOT: 'http://localhost:9876',
-      API_KEY: process.env.API_KEY || 'test'
-    },
-    stdio: 'inherit'
-  });
-  
-  testDriver.on('exit', (code) => {
-    log('blue', '\n─────────────────────────────────────────────');
-    log('yellow', '\n🧹 Cleaning up...');
-    testApp.kill();
-    proxyServer.kill();
-    
-    if (code === 0) {
-      log('green', '\n✅ Test completed successfully!\n');
+  try {
+    // Start test app if needed
+    if (startOwnApp) {
+      const testAppServer = path.join(TEST_APP_DIR, 'server.js');
+      if (!fs.existsSync(testAppServer)) {
+        log('red', '❌ Test app not found at: ' + testAppServer);
+        process.exit(1);
+      }
+      
+      log('cyan', '1️⃣  Starting test UI app (port 4000)...');
+      testApp = spawn('node', [testAppServer], {
+        cwd: TEST_APP_DIR,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const testAppReady = await checkPort(4000);
+      if (!testAppReady) {
+        log('red', '❌ Failed to start test app on port 4000');
+        testApp.kill();
+        process.exit(1);
+      }
+      log('green', '✅ Test app ready at http://localhost:4000');
     } else {
-      log('red', '\n❌ Test failed with exit code: ' + code + '\n');
+      log('blue', `🌐 Using external app: ${options.appUrl}`);
     }
-    process.exit(code);
-  });
+    
+    // Start proxy server
+    log('cyan', '\n2️⃣  Starting proxy server (port 9876)...');
+    proxyServer = spawn('node', [SERVER_SCRIPT], {
+      cwd: INSTALL_DIR,
+      env: { 
+        ...process.env, 
+        PORT: '9876',
+        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
+      },
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    
+    await new Promise(resolve => setTimeout(resolve, 2000));
   
-  // Handle cleanup on interrupt
-  process.on('SIGINT', () => {
-    log('yellow', '\n\n⚠️  Interrupted! Cleaning up...');
-    testApp.kill();
-    proxyServer.kill();
-    process.exit(130);
-  });
+    const proxyReady = await checkPort(9876);
+    if (!proxyReady) {
+      log('red', '❌ Failed to start proxy server on port 9876');
+      if (testApp) testApp.kill();
+      proxyServer.kill();
+      process.exit(1);
+    }
+    log('green', '✅ Proxy server ready at http://localhost:9876');
+    
+    // Determine test execution method
+    const appUrl = options.appUrl || 'http://localhost:4000';
+    let testDriverArgs;
+    
+    if (options.testFile) {
+      log('cyan', `\n3️⃣  Running test from file: ${options.testFile}\n`);
+      testDriverArgs = ['testdriverai', 'run', '--url', appUrl, '--file', options.testFile];
+    } else if (options.prompt) {
+      log('cyan', `\n3️⃣  Running natural language test...\n`);
+      log('magenta', `   📝 "${options.prompt}"\n`);
+      testDriverArgs = ['testdriverai', 'run', '--url', appUrl, '--prompt', options.prompt];
+    } else {
+      log('red', '❌ No test specified! Provide PROMPT or TEST parameter.');
+      if (testApp) testApp.kill();
+      proxyServer.kill();
+      process.exit(1);
+    }
+    
+    log('blue', '─────────────────────────────────────────────');
+    
+    const testDriver = spawn('npx', testDriverArgs, {
+      env: { 
+        ...process.env, 
+        TD_API_ROOT: 'http://localhost:9876',
+        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
+      },
+      stdio: 'inherit'
+    });
+    
+    testDriver.on('exit', (code) => {
+      log('blue', '\n─────────────────────────────────────────────');
+      log('yellow', '\n🧹 Cleaning up...');
+      if (testApp) testApp.kill();
+      proxyServer.kill();
+      
+      if (code === 0) {
+        log('green', '\n✅ Test completed successfully!\n');
+      } else {
+        log('red', '\n❌ Test failed with exit code: ' + code + '\n');
+      }
+      process.exit(code);
+    });
+    
+    // Handle cleanup on interrupt
+    process.on('SIGINT', () => {
+      log('yellow', '\n\n⚠️  Interrupted! Cleaning up...');
+      if (testApp) testApp.kill();
+      proxyServer.kill();
+      process.exit(130);
+    });
+    
+  } catch (error) {
+    log('red', '\n❌ Error: ' + error.message);
+    if (testApp) testApp.kill();
+    if (proxyServer) proxyServer.kill();
+    process.exit(1);
+  }
 }
 
-if (process.argv.length < 3) {
-  log('cyan', '\n╔════════════════════════════════════════════╗');
-  log('cyan', '║  TestUI - AI Agent Test Execution         ║');
-  log('cyan', '╚════════════════════════════════════════════╝\n');
-  log('yellow', 'Usage:');
-  log('cyan', '  testui "your natural language test command"\n');
-  log('yellow', 'Examples:');
-  log('cyan', '  testui "login with demo@testdriver.ai"');
-  log('cyan', '  testui "click all buttons and verify"');
-  log('cyan', '  testui "fill form and submit"\n');
-  log('yellow', 'Environment:');
-  log('cyan', '  API_KEY     - Your Z.ai or Anthropic API key');
-  log('cyan', '  TD_API_ROOT - Proxy server URL (auto-configured)\n');
-  process.exit(0);
+// Main execution
+const args = parseArgs();
+
+if (process.argv.length < 3 || process.argv.includes('--help') || process.argv.includes('-h')) {
+  showHelp();
 }
 
-const testInput = process.argv.slice(2).join(' ');
-startTestUI(testInput).catch(err => {
+if (!args.prompt && !args.testFile) {
+  log('red', '\n❌ No test specified!');
+  log('yellow', '\nProvide either:');
+  log('cyan', '  PROMPT="natural language test"');
+  log('cyan', '  TEST="path/to/test.yaml"\n');
+  log('yellow', 'Run with --help for more info\n');
+  process.exit(1);
+}
+
+startTestUI(args).catch(err => {
   log('red', '\n❌ Error: ' + err.message);
+  log('red', err.stack);
   process.exit(1);
 });
