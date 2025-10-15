@@ -1,5 +1,97 @@
-<a href="https://testdriver.ai"><img src="https://github.com/dashcamio/testdriver/assets/318295/2a0ad981-8504-46f0-ad97-60cb6c26f1e7"/></a>
+testui Command
+# Natural language testing
+testui PROMPT="login with demo@testdriver.ai"
 
+# YAML test file execution  
+testui TEST="tests/login.yaml"
+
+# External app testing
+testui APP="http://localhost:3000" PROMPT="test checkout flow"
+
+# Shorthand (positional)
+testui "click all buttons"
+Key Features:
+
+✅ PROMPT="text" - Natural language test execution
+✅ TEST="file.yaml" - YAML test file execution
+✅ APP="url" - Test external applications
+✅ Positional argument support (shorthand syntax)
+✅ Automatic ANTHROPIC_API_KEY validation
+✅ Built-in help command (--help, -h)
+✅ Proper error handling and cleanup
+✅ External app testing capability
+context Command
+View current page context for debugging
+Helps understand page structure during test development
+📖 Updated Documentation
+Clear 4-Step Quick Start
+# Step 1: Clone & Install
+git clone https://github.com/Zeeeepa/cli.git
+cd cli/testdriver-proxy
+npm install
+
+# Step 2: Get Z.ai API Key (Free)
+Visit https://z.ai and sign up
+
+# Step 3: Configure
+export ANTHROPIC_API_KEY="your-zai-api-key"
+echo 'export ANTHROPIC_API_KEY="your-key"' >> ~/.bashrc
+
+# Step 4: Test It!
+testui PROMPT="login with demo@testdriver.ai"
+Documentation Improvements:
+
+✅ Z.ai API key setup instructions
+✅ ANTHROPIC_API_KEY environment variable explained
+✅ Complete usage examples for all scenarios
+✅ Persistence configuration (bashrc/zshrc)
+✅ All command variations documented
+🛡️ Robustness & Error Handling
+✅ Validates ANTHROPIC_API_KEY before starting tests
+✅ Clear error messages if API key is missing
+✅ Proper cleanup on errors and interrupts
+✅ Handles external app testing gracefully
+✅ Built-in help documentation
+🔧 Technical Improvements
+server.js:
+
+Enhanced error handling
+Better request/response validation
+Structured logging
+Timeout handling
+Graceful degradation
+📦 Files Changed
+testdriver-proxy/bin/testui (NEW) - Main test command
+testdriver-proxy/bin/context (NEW) - Debug helper
+testdriver-proxy/README.md - Complete rewrite with setup guide
+testdriver-proxy/server.js - Enhanced robustness
+testdriver-proxy/package.json - Updated scripts
+testdriver-proxy/.env.example - Updated configuration
+🧪 Testing
+Tested with:
+
+✅ Z.ai API (GLM-4.5V model)
+✅ PROMPT argument parsing
+✅ TEST file execution
+✅ APP external URL testing
+✅ Error handling (missing API key)
+✅ Help command
+✅ Cleanup on errors and interrupts
+📝 Usage Examples
+# Basic testing (auto-starts test app on port 4000)
+testui PROMPT="click all buttons and verify"
+testui PROMPT="login with test@example.com"
+
+# Test file execution
+testui TEST="path/to/test.yaml"
+testui TEST="tests/login-flow.yaml"
+
+# External app testing
+testui APP="http://localhost:3000" PROMPT="test checkout"
+testui APP="https://myapp.com" PROMPT="verify homepage"
+
+# Shorthand
+testui "click the signup button"
 # TestDriver.ai
 
 Automate and scale QA with computer-use agents.
