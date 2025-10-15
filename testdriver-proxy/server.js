@@ -22,6 +22,7 @@ const { body, validationResult } = require('express-validator');
 const { v4: uuidv4 } = require('uuid');
 const http = require('http');
 const WebSocket = require('ws');
+const { SandboxServer } = require('./lib/sandboxServer');
 
 // Load environment variables
 dotenv.config();
@@ -964,78 +965,9 @@ app.use((err, req, res, next) => {
 // Create HTTP server for WebSocket support
 const server = http.createServer(app);
 
-// Create WebSocket server
-const wss = new WebSocket.Server({ server });
-
-// WebSocket connection handler
-wss.on('connection', (ws) => {
-  logger.info('WebSocket client connected');
-  const pendingRequests = new Map();
-  
-  ws.on('message', async (message) => {
-    try {
-      const data = JSON.parse(message.toString());
-      logger.debug(`WS message received: ${JSON.stringify(data).substring(0, 200)}`);
-      
-      // Extract request ID and method
-      const requestId = data.requestId || data.id;
-      const method = data.method || data.command;
-      
-      // Handle TestDriver protocol messages by routing to appropriate HTTP endpoints
-      let response = { requestId };
-      
-      try {
-        // Map WebSocket commands to internal API calls
-        if (method === 'input' || method === 'execute') {
-          // Forward to /api/v1/testdriver/input endpoint logic
-          const prompt = data.prompt || data.text || '';
-          const imageData = data.image || data.screenshot;
-          
-          // Simulate API call response
-          response.success = true;
-          response.result = {
-            action: 'click',
-            element: prompt,
-            confidence: 0.95
-          };
-        } else if (method === 'generate') {
-          // Forward to /api/v1/testdriver/generate
-          response.success = true;
-          response.result = {
-            steps: [],
-            test: 'generated test YAML'
-          };
-        } else {
-          // Generic success response for unknown methods
-          response.success = true;
-          response.message = `Handled ${method}`;
-        }
-      } catch (error) {
-        response.success = false;
-        response.error = error.message;
-      }
-      
-      // Send response with matching request ID
-      ws.send(JSON.stringify(response));
-      logger.debug(`WS response sent: ${JSON.stringify(response).substring(0, 200)}`);
-      
-    } catch (error) {
-      logger.error(`WebSocket message error: ${error.message}`);
-      ws.send(JSON.stringify({ 
-        error: error.message,
-        requestId: 'unknown'
-      }));
-    }
-  });
-  
-  ws.on('close', () => {
-    logger.info('WebSocket client disconnected');
-  });
-  
-  ws.on('error', (error) => {
-    logger.error(`WebSocket error: ${error.message}`);
-  });
-});
+// Create WebSocket sandbox server for TestDriver execution
+const sandboxServer = new SandboxServer(server);
+logger.info('🚀 Local sandbox server initialized with Playwright');
 
 server.listen(config.port, () => {
   logger.info(`
@@ -1093,16 +1025,18 @@ server.on('error', (error) => {
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
+  await sandboxServer.cleanup();
   server.close(() => {
     logger.info('Server closed');
     process.exit(0);
   });
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully');
+  await sandboxServer.cleanup();
   server.close(() => {
     logger.info('Server closed');
     process.exit(0);
