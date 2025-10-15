@@ -30,7 +30,10 @@ const config = {
   apiProvider: process.env.API_PROVIDER || 'zai',
   apiKey: process.env.API_KEY || process.env.ANTHROPIC_API_KEY,
   apiBaseUrl: process.env.API_BASE_URL || 'https://api.z.ai/api/anthropic',
-  model: process.env.MODEL || 'glm-4.5V',
+  // GLM-4.6 for YAML generation (text-only, faster)
+  generationModel: process.env.GENERATION_MODEL || 'glm-4.6',
+  // GLM-4.5V for visual execution (vision model)
+  visionModel: process.env.VISION_MODEL || 'glm-4.5V',
   maxTokens: parseInt(process.env.MAX_TOKENS || '4000'),
   temperature: parseFloat(process.env.TEMPERATURE || '0.7'),
   debug: process.env.DEBUG === 'true'
@@ -131,14 +134,22 @@ async function processScreenshot(base64Image) {
 
 /**
  * Call the configured LLM API (Z.ai, OpenAI, Anthropic, etc.) with retry logic
+ * @param {Array} messages - Chat messages
+ * @param {String} systemPrompt - System prompt
+ * @param {Boolean} stream - Stream response
+ * @param {String} modelOverride - Override model selection (generationModel or visionModel)
+ * @param {Number} retries - Retry attempts
  */
-async function callLLM(messages, systemPrompt, stream = false, retries = 3) {
+async function callLLM(messages, systemPrompt, stream = false, modelOverride = null, retries = 3) {
   const headers = {
     'Content-Type': 'application/json'
   };
 
   let requestBody;
   let url;
+  
+  // Use override model or default to visionModel
+  const selectedModel = modelOverride || config.visionModel;
 
   // Configure based on API provider
   if (config.apiProvider === 'zai' || config.apiProvider === 'anthropic') {
@@ -147,7 +158,7 @@ async function callLLM(messages, systemPrompt, stream = false, retries = 3) {
     headers['anthropic-version'] = '2023-06-01';
     
     requestBody = {
-      model: config.model,
+      model: selectedModel,
       max_tokens: config.maxTokens,
       messages: messages,
       stream: stream
@@ -166,7 +177,7 @@ async function callLLM(messages, systemPrompt, stream = false, retries = 3) {
       : messages;
     
     requestBody = {
-      model: config.model,
+      model: selectedModel,
       messages: formattedMessages,
       max_tokens: config.maxTokens,
       temperature: config.temperature,
@@ -336,8 +347,9 @@ Be concise. Focus on the exact task requested.`;
       { role: 'user', content: userContent }
     ];
 
-    // Call LLM
-    const response = await callLLM(messages, systemPrompt, stream);
+    // Call LLM with GLM-4.6 for YAML generation (text-only, faster)
+    const response = await callLLM(messages, systemPrompt, stream, config.generationModel);
+    logger.info(\`YAML generation using model: \${config.generationModel}\`);
     const textContent = extractTextContent(response);
 
     logger.debug('LLM Response:', textContent);
