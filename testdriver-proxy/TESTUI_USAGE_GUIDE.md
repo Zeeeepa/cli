@@ -21,6 +21,10 @@ TestUI is a natural language interface for browser automation and UI testing. Si
 ### Installation
 
 ```bash
+# Clone the repository
+git clone https://github.com/Zeeeepa/cli.git
+cd cli
+
 # Navigate to testdriver-proxy directory
 cd testdriver-proxy
 
@@ -31,6 +35,24 @@ npm install
 export ANTHROPIC_API_KEY="your-key-here"
 # OR
 export ANTHROPIC_AUTH_TOKEN="your-token-here"
+```
+
+### Or Test the PR Before Merge
+
+```bash
+# Clone and checkout PR #4
+git clone https://github.com/Zeeeepa/cli.git
+cd cli
+git fetch origin pull/4/head:test-testui
+git checkout test-testui
+
+# Navigate to testdriver-proxy and install
+cd testdriver-proxy
+npm install
+
+# Set your API key and test!
+export ANTHROPIC_API_KEY="your-key-here"
+./bin/testui "visit example.com and get the page title"
 ```
 
 ### Your First Test
@@ -45,6 +67,25 @@ That's it! 🎉
 ---
 
 ## 💻 How to Run Locally
+
+### After PR is Merged
+
+```bash
+# Pull the latest changes
+git pull origin main
+
+# Navigate to testdriver-proxy
+cd testdriver-proxy
+
+# Install if not already done
+npm install
+
+# Set your API key
+export ANTHROPIC_API_KEY="your-key-here"
+
+# Start testing!
+./bin/testui "your test instruction here"
+```
 
 ### Three Usage Patterns
 
@@ -449,4 +490,3 @@ Found a bug or have a feature request? Please open an issue!
 ---
 
 **Made with ❤️ for easy UI testing**
-
