@@ -58,11 +58,28 @@ export ANTHROPIC_API_KEY="your-key-here"
 ### Your First Test
 
 ```bash
-# Test any website with natural language!
+# Option 1: Direct binary
 ./bin/testui "visit example.com and get the page title"
+
+# Option 2: NPM script (recommended) ⭐
+npm run testui "visit example.com and get the page title"
+
+# Option 3: After global install
+npm install -g .
+testui "visit example.com and get the page title"  # Works anywhere!
 ```
 
 That's it! 🎉
+
+### Quick Command Reference
+
+| Command | Usage |
+|---------|-------|
+| `npm run testui "..."` | **Recommended** - Use from testdriver-proxy directory |
+| `npm run test-ui "..."` | Alternative alias |
+| `npm run ui "..."` | Short alias |
+| `./bin/testui "..."` | Direct binary execution |
+| `testui "..."` | After `npm install -g .` (works anywhere) |
 
 ---
 
@@ -87,21 +104,49 @@ export ANTHROPIC_API_KEY="your-key-here"
 ./bin/testui "your test instruction here"
 ```
 
-### Three Usage Patterns
+### Three Ways to Run TestUI
 
-#### 1️⃣ Generate & Run New Test
+#### Option 1: Direct Binary (./bin/testui)
 ```bash
 ./bin/testui "go to myapp.com, click login, and verify dashboard loads"
 ```
 
+#### Option 2: NPM Scripts (Recommended) ⭐
+```bash
+# Use any of these aliases:
+npm run testui "go to google search for analysis get all results list"
+npm run test-ui "visit github.com and extract stars"
+npm run ui "test my app login flow"
+```
+
+#### Option 3: Global Install (Use 'testui' Anywhere)
+```bash
+# Install globally (one-time)
+npm install -g .
+
+# Now use 'testui' from anywhere!
+cd ~/my-project
+testui "test my app"
+
+cd ~/another-project
+testui "visit localhost:3000 and click buttons"
+```
+
+### Three Usage Patterns
+
+#### 1️⃣ Generate & Run New Test
+```bash
+npm run testui "go to myapp.com, click login, and verify dashboard loads"
+```
+
 #### 2️⃣ Upgrade Existing Test
 ```bash
-./bin/testui "upgrade ./tests/login.yaml to include error handling"
+npm run testui "upgrade ./tests/login.yaml to include error handling"
 ```
 
 #### 3️⃣ Run Existing Test
 ```bash
-./bin/testui "./tests/checkout-flow.yaml"
+npm run testui "./tests/checkout-flow.yaml"
 ```
 
 ### Local Development Testing
@@ -110,8 +155,8 @@ export ANTHROPIC_API_KEY="your-key-here"
 # Start your app
 npm run dev  # App runs on localhost:3000
 
-# Test it with TestUI
-./bin/testui "visit localhost:3000, click 'Sign Up', fill email with test@example.com"
+# Test it with TestUI (use npm run for convenience!)
+npm run testui "visit localhost:3000, click 'Sign Up', fill email with test@example.com"
 ```
 
 ---
@@ -196,32 +241,32 @@ result = agent.test_interface("test login flow")
 
 ### E-commerce Testing
 ```bash
-./bin/testui "go to mystore.com, search for 'iPhone 15', add first result to cart, and verify cart shows 1 item"
+npm run testui "go to mystore.com, search for 'iPhone 15', add first result to cart, and verify cart shows 1 item"
 ```
 
 ### Form Validation
 ```bash
-./bin/testui "visit signup.myapp.com, enter invalid email 'notanemail', submit, and check for error message"
+npm run testui "visit signup.myapp.com, enter invalid email 'notanemail', submit, and check for error message"
 ```
 
 ### Data Extraction
 ```bash
-./bin/testui "go to news.ycombinator.com and extract top 5 story titles with point counts"
+npm run testui "go to news.ycombinator.com and extract top 5 story titles with point counts"
 ```
 
 ### GitHub Repository Analysis
 ```bash
-./bin/testui "visit github.com/microsoft/playwright and extract description, star count, and fork count"
+npm run testui "visit github.com/microsoft/playwright and extract description, star count, and fork count"
 ```
 
 ### Wikipedia Research
 ```bash
-./bin/testui "search wikipedia for 'artificial intelligence', click first result, extract first paragraph"
+npm run testui "search wikipedia for 'artificial intelligence', click first result, extract first paragraph"
 ```
 
 ### Multi-Step Authentication
 ```bash
-./bin/testui "go to app.mysite.com, enter email 'user@test.com', click continue, enter password 'pass123', submit, verify dashboard"
+npm run testui "go to app.mysite.com, enter email 'user@test.com', click continue, enter password 'pass123', submit, verify dashboard"
 ```
 
 ---
