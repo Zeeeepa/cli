@@ -1,0 +1,8 @@
+version: 1
+name: Simple Google Search Test
+description: Navigate to Google
+steps:
+  - command: navigate
+    url: "https://www.google.com"
+  - command: wait
+    duration: 2000

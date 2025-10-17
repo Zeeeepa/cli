@@ -4,10 +4,14 @@ const { spawn } = require('child_process');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
+const axios = require('axios');
+const yaml = require('js-yaml');
+const os = require('os');
 
 const INSTALL_DIR = path.join(__dirname, '..');
 const TEST_APP_DIR = path.join(INSTALL_DIR, 'tests', 'ui', 'test-app');
 const SERVER_SCRIPT = path.join(INSTALL_DIR, 'server.js');
+const TEMP_DIR = path.join(os.tmpdir(), 'testui-temp');
 
 const colors = {
   reset: '\x1b[0m',
@@ -25,24 +29,35 @@ function log(color, msg) {
 
 function parseArgs() {
   const args = process.argv.slice(2);
+  const fullInput = args.join(' ');
+  
   const parsed = {
     prompt: null,
     testFile: null,
-    appUrl: null
+    isUpgrade: false
   };
 
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg.startsWith('PROMPT=')) {
-      parsed.prompt = arg.split('=')[1].replace(/^["']|["']$/g, '');
-    } else if (arg.startsWith('TEST=')) {
-      parsed.testFile = arg.split('=')[1].replace(/^["']|["']$/g, '');
-    } else if (arg.startsWith('APP=')) {
-      parsed.appUrl = arg.split('=')[1].replace(/^["']|["']$/g, '');
-    } else if (!arg.startsWith('-') && !parsed.prompt) {
-      // Default positional argument is prompt
-      parsed.prompt = arg;
-    }
+  // Check if input contains file path patterns
+  const filePathRegex = /(?:upgrade|enhance|improve|modify)\s+([^\s]+\.ya?ml)/i;
+  const standaloneFileRegex = /^([^\s]+\.ya?ml)$/;
+  
+  const upgradeMatch = fullInput.match(filePathRegex);
+  const standaloneMatch = fullInput.match(standaloneFileRegex);
+  
+  if (upgradeMatch) {
+    // Format: "upgrade /path/to/test.yaml to include robust testing"
+    parsed.testFile = upgradeMatch[1];
+    parsed.isUpgrade = true;
+    // Extract the instruction part after the file path
+    const afterFile = fullInput.substring(fullInput.indexOf(upgradeMatch[1]) + upgradeMatch[1].length).trim();
+    parsed.prompt = afterFile || 'enhance with robust testing and error handling';
+  } else if (standaloneMatch) {
+    // Format: "/path/to/test.yaml" (just run the file)
+    parsed.testFile = standaloneMatch[1];
+    parsed.prompt = null;
+  } else {
+    // Everything else is a prompt
+    parsed.prompt = fullInput;
   }
 
   return parsed;
@@ -53,19 +68,38 @@ function showHelp() {
   log('cyan', '║  TestUI - AI Agent Test Execution         ║');
   log('cyan', '╚════════════════════════════════════════════╝\n');
   
-  console.log('Usage:');
-  console.log('  testui PROMPT="your natural language test"');
-  console.log('  testui TEST="path/to/test.yaml"');
-  console.log('  testui APP="http://your-app:4000" PROMPT="test instructions"\n');
+  console.log('TestUI uses natural language to generate and execute browser tests.\n');
   
-  console.log('Examples:');
-  console.log('  testui PROMPT="login with demo@testdriver.ai"');
-  console.log('  testui TEST="tests/login.yaml"');
-  console.log('  testui "click all buttons"  # Positional prompt\n');
+  console.log('Usage:');
+  console.log('  testui "natural language instructions"\n');
+  
+  console.log('Examples:\n');
+  
+  console.log('  📝 Generate & run new test:');
+  console.log('  testui "go to google, search for analysis tools and get best UI tools"');
+  console.log('  testui "test login on myapp.com with user@test.com"\n');
+  
+  console.log('  ⬆️  Upgrade existing test:');
+  console.log('  testui "upgrade /home/l/test.yaml to include robust testing"');
+  console.log('  testui "enhance ./tests/login.yaml with error handling"\n');
+  
+  console.log('  ▶️  Run existing test file:');
+  console.log('  testui "./tests/checkout.yaml"\n');
+  
+  console.log('How it works:');
+  console.log('  --prompt: Sends context to AI (glm-4.5V)');
+  console.log('            → Generates YAML test');
+  console.log('            → Auto-runs the test');
+  console.log('  --file:   Runs existing YAML directly');
+  console.log('  Both:     AI enhances existing YAML with prompt context\n');
   
   console.log('Environment Variables:');
-  console.log('  ANTHROPIC_API_KEY  - Your Z.ai API key (required)');
-  console.log('  APP_URL           - Override default test app URL\n');
+  console.log('  ANTHROPIC_API_KEY    - Your API key (required)');
+  console.log('  TESTUI_PROXY_PORT    - Proxy server port (default: 9876)');
+  console.log('  MODEL                - Override model (default: glm-4.5V)\n');
+  
+  console.log('Note: URLs can be included directly in prompts!');
+  console.log('      No separate --app flag needed.\n');
   
   process.exit(0);
 }
@@ -82,98 +116,195 @@ function checkPort(port) {
   });
 }
 
+async function generateYAMLFromPrompt(prompt, proxyPort, existingYamlPath = null, isUpgrade = false) {
+  log('cyan', '\n🤖 Generating test YAML from prompt...');
+  log('magenta', `   📝 "${prompt}"\n`);
+  
+  let existingYamlContent = null;
+  if (existingYamlPath) {
+    if (fs.existsSync(existingYamlPath)) {
+      log('blue', `   📄 ${isUpgrade ? 'Upgrading' : 'Enhancing'} existing YAML: ${existingYamlPath}`);
+      existingYamlContent = fs.readFileSync(existingYamlPath, 'utf8');
+    } else {
+      log('yellow', `   ⚠️  File not found: ${existingYamlPath}`);
+      log('yellow', '   Creating new test based on your instructions...\n');
+      existingYamlPath = null;
+    }
+  }
+  
+  try {
+    let contextPrompt;
+    if (existingYamlContent) {
+      // Smart upgrade prompt for existing files
+      contextPrompt = `You are upgrading an existing TestDriver YAML test file.
+
+USER REQUEST: ${prompt}
+
+EXISTING TEST FILE:
+\`\`\`yaml
+${existingYamlContent}
+\`\`\`
+
+INSTRUCTIONS:
+1. Analyze the existing test structure carefully
+2. Keep all existing test steps unless they conflict with the upgrade request
+3. Add new steps or enhance existing ones based on the request
+4. If the request says "robust testing", add:
+   - Error handling steps
+   - Validation assertions
+   - Edge case testing
+   - Wait steps for stability
+5. Maintain the existing test flow and structure
+6. Output ONLY the complete upgraded YAML test (all steps, not just new ones)
+7. Use proper TestDriver YAML format
+
+Generate the COMPLETE upgraded test:`;
+    } else {
+      contextPrompt = prompt;
+    }
+      
+    const response = await axios.post(`http://localhost:${proxyPort}/api/v1/testdriver/input`, {
+      input: contextPrompt,
+      screenshot: '',
+      mousePosition: { x: 0, y: 0 },
+      activeWindow: 'TestUI',
+      stream: false
+    }, {
+      timeout: 60000,  // Increased timeout for complex upgrades
+      headers: { 'Content-Type': 'application/json' }
+    });
+    
+    if (response.data && response.data.markdown) {
+      // Extract YAML from markdown code block
+      const markdown = response.data.markdown;
+      const yamlMatch = markdown.match(/```yaml\n([\s\S]*?)\n```/);
+      
+      if (!yamlMatch) {
+        throw new Error('No YAML code block found in response');
+      }
+      
+      const yamlSteps = yamlMatch[1];
+      
+      // Wrap in proper TestDriver format
+      const yamlContent = `version: "1"
+name: ${existingYamlPath ? `Enhanced Test: ${path.basename(existingYamlPath)}` : 'Generated Test from Prompt'}
+description: ${prompt}
+steps:
+${yamlSteps}`;
+      
+      // Save to temp file
+      if (!fs.existsSync(TEMP_DIR)) {
+        fs.mkdirSync(TEMP_DIR, { recursive: true });
+      }
+      
+      const tempFile = path.join(TEMP_DIR, `test-${Date.now()}.yaml`);
+      fs.writeFileSync(tempFile, yamlContent);
+      
+      log('green', `✅ Generated YAML test file: ${tempFile}`);
+      log('cyan', '\nGenerated test steps:');
+      console.log(yamlContent);
+      
+      return tempFile;
+    } else {
+      throw new Error('Invalid response from proxy /input endpoint');
+    }
+  } catch (error) {
+    log('red', `❌ Failed to generate YAML: ${error.message}`);
+    if (error.response) {
+      log('yellow', `   Response status: ${error.response.status}`);
+      log('yellow', `   Response data: ${JSON.stringify(error.response.data)}`);
+    }
+    throw error;
+  }
+}
+
 async function startTestUI(options) {
   log('cyan', '\n╔════════════════════════════════════════════╗');
   log('cyan', '║  TestUI - AI Agent Test Execution         ║');
   log('cyan', '╚════════════════════════════════════════════╝\n');
   
-  // Validate API key
-  if (!process.env.ANTHROPIC_API_KEY) {
-    log('red', '❌ ANTHROPIC_API_KEY environment variable not set!');
-    log('yellow', '\n📝 Set your Z.ai API key:');
-    log('cyan', '   export ANTHROPIC_API_KEY="your-zai-api-key"\n');
+  // Validate API key (check multiple possible environment variables)
+  const apiKey = process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN || process.env.API_KEY;
+  if (!apiKey) {
+    log('red', '❌ ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN environment variable not set!');
+    log('yellow', '\n📝 Set your API key:');
+    log('cyan', '   export ANTHROPIC_API_KEY="your-api-key"');
+    log('cyan', '   # or');
+    log('cyan', '   export ANTHROPIC_AUTH_TOKEN="your-auth-token"\n');
     process.exit(1);
   }
   
-  const startOwnApp = !options.appUrl;
-  let testApp, proxyServer;
+  let proxyServer;
+  let generatedTestFile = null;
+  
+  // Determine proxy port (allow override via environment)
+  const proxyPort = parseInt(process.env.TESTUI_PROXY_PORT || process.env.PORT || '9876');
   
   try {
-    // Start test app if needed
-    if (startOwnApp) {
-      const testAppServer = path.join(TEST_APP_DIR, 'server.js');
-      if (!fs.existsSync(testAppServer)) {
-        log('red', '❌ Test app not found at: ' + testAppServer);
-        process.exit(1);
-      }
-      
-      log('cyan', '1️⃣  Starting test UI app (port 4000)...');
-      testApp = spawn('node', [testAppServer], {
-        cwd: TEST_APP_DIR,
-        stdio: ['ignore', 'pipe', 'pipe']
-      });
-      
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const testAppReady = await checkPort(4000);
-      if (!testAppReady) {
-        log('red', '❌ Failed to start test app on port 4000');
-        testApp.kill();
-        process.exit(1);
-      }
-      log('green', '✅ Test app ready at http://localhost:4000');
-    } else {
-      log('blue', `🌐 Using external app: ${options.appUrl}`);
-    }
-    
     // Start proxy server
-    log('cyan', '\n2️⃣  Starting proxy server (port 9876)...');
+    log('cyan', `1️⃣  Starting proxy server (port ${proxyPort})...`);
     proxyServer = spawn('node', [SERVER_SCRIPT], {
       cwd: INSTALL_DIR,
       env: { 
         ...process.env, 
-        PORT: '9876',
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
+        PORT: String(proxyPort),
+        ANTHROPIC_API_KEY: apiKey
       },
       stdio: ['ignore', 'pipe', 'pipe']
     });
     
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 3000));
   
-    const proxyReady = await checkPort(9876);
+    const proxyReady = await checkPort(proxyPort);
     if (!proxyReady) {
-      log('red', '❌ Failed to start proxy server on port 9876');
-      if (testApp) testApp.kill();
+      log('red', `❌ Failed to start proxy server on port ${proxyPort}`);
+      log('yellow', `   Port ${proxyPort} might be in use. Try TESTUI_PROXY_PORT=<other-port>`);
       proxyServer.kill();
       process.exit(1);
     }
-    log('green', '✅ Proxy server ready at http://localhost:9876');
+    log('green', `✅ Proxy server ready at http://localhost:${proxyPort}`);
+    
+    // Set TD_API_ROOT to proxy server URL for AI decision endpoints
+    // Note: The proxy handles /api/v1/testdriver/* endpoints for AI calls
+    const tdApiRoot = `http://localhost:${proxyPort}`;
+    process.env.TD_API_ROOT = tdApiRoot;
+    log('blue', `🔗 TD_API_ROOT → ${tdApiRoot} (AI endpoints only)\n`);
     
     // Determine test execution method
-    const appUrl = options.appUrl || 'http://localhost:4000';
-    let testDriverArgs;
+    let testFilePath;
     
-    if (options.testFile) {
-      log('cyan', `\n3️⃣  Running test from file: ${options.testFile}\n`);
-      testDriverArgs = ['testdriverai', 'run', '--url', appUrl, '--file', options.testFile];
+    if (options.testFile && options.prompt) {
+      // File + prompt: upgrade/enhance existing YAML
+      log('cyan', `2️⃣  ${options.isUpgrade ? 'Upgrading' : 'Enhancing'} existing YAML with prompt...\n`);
+      testFilePath = await generateYAMLFromPrompt(options.prompt, proxyPort, options.testFile, options.isUpgrade);
+      generatedTestFile = testFilePath;
+    } else if (options.testFile) {
+      // File only: direct execution
+      log('cyan', `2️⃣  Running test from file: ${options.testFile}\n`);
+      testFilePath = options.testFile;
     } else if (options.prompt) {
-      log('cyan', `\n3️⃣  Running natural language test...\n`);
-      log('magenta', `   📝 "${options.prompt}"\n`);
-      testDriverArgs = ['testdriverai', 'run', '--url', appUrl, '--prompt', options.prompt];
+      // Prompt only: generate and run
+      log('cyan', '2️⃣  Processing natural language prompt...\n');
+      testFilePath = await generateYAMLFromPrompt(options.prompt, proxyPort);
+      generatedTestFile = testFilePath;
     } else {
-      log('red', '❌ No test specified! Provide PROMPT or TEST parameter.');
-      if (testApp) testApp.kill();
+      log('red', '❌ No test specified! Provide a prompt or file path.');
+      log('yellow', '   Run: testui --help for usage examples\n');
       proxyServer.kill();
       process.exit(1);
     }
     
     log('blue', '─────────────────────────────────────────────');
+    log('cyan', `\n3️⃣  Executing test: ${path.basename(testFilePath)}\n`);
+    log('blue', '─────────────────────────────────────────────\n');
     
-    const testDriver = spawn('npx', testDriverArgs, {
+    // Run testdriverai with the YAML file
+    const testDriver = spawn('npx', ['--yes', 'testdriverai@latest', 'run', testFilePath], {
       env: { 
-        ...process.env, 
-        TD_API_ROOT: 'http://localhost:9876',
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
+        ...process.env,
+        TD_API_ROOT: tdApiRoot,
+        // Don't pass ANTHROPIC_API_KEY - TestDriver will use TD_API_ROOT for AI
+        ANTHROPIC_API_KEY: undefined
       },
       stdio: 'inherit'
     });
@@ -181,8 +312,17 @@ async function startTestUI(options) {
     testDriver.on('exit', (code) => {
       log('blue', '\n─────────────────────────────────────────────');
       log('yellow', '\n🧹 Cleaning up...');
-      if (testApp) testApp.kill();
       proxyServer.kill();
+      
+      // Clean up generated test file
+      if (generatedTestFile && fs.existsSync(generatedTestFile)) {
+        try {
+          fs.unlinkSync(generatedTestFile);
+          log('cyan', `   Removed temp file: ${path.basename(generatedTestFile)}`);
+        } catch (e) {
+          // Ignore cleanup errors
+        }
+      }
       
       if (code === 0) {
         log('green', '\n✅ Test completed successfully!\n');
@@ -195,15 +335,28 @@ async function startTestUI(options) {
     // Handle cleanup on interrupt
     process.on('SIGINT', () => {
       log('yellow', '\n\n⚠️  Interrupted! Cleaning up...');
-      if (testApp) testApp.kill();
       proxyServer.kill();
+      if (generatedTestFile && fs.existsSync(generatedTestFile)) {
+        try {
+          fs.unlinkSync(generatedTestFile);
+        } catch (e) {
+          // Ignore
+        }
+      }
       process.exit(130);
     });
     
   } catch (error) {
     log('red', '\n❌ Error: ' + error.message);
-    if (testApp) testApp.kill();
+    if (error.stack) log('yellow', error.stack);
     if (proxyServer) proxyServer.kill();
+    if (generatedTestFile && fs.existsSync(generatedTestFile)) {
+      try {
+        fs.unlinkSync(generatedTestFile);
+      } catch (e) {
+        // Ignore
+      }
+    }
     process.exit(1);
   }
 }

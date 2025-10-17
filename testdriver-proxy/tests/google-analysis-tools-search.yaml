@@ -1,0 +1,16 @@
+version: "1"
+name: Google Search for UI Analysis Tools
+description: Go to Google, search for analysis tools and retrieve the most effective UI analysis tools names
+steps:
+  - command: hover-text
+    text: "Search"
+    action: click
+  - command: type
+    text: "analysis tools"
+  - command: press
+    key: "Enter"
+  - command: wait
+    duration: 2000
+  - command: assert
+    expect: "search results contain UI analysis tools"
+

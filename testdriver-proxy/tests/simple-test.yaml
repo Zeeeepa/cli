@@ -1,0 +1,10 @@
+version: "1"
+name: Simple Test
+description: A simple test that navigates to Google
+steps:
+  - navigate: "https://google.com"
+  - wait: 2
+  - assert:
+      value: "Google"
+      in: title
+
