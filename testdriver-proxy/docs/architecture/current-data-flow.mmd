@@ -1,0 +1,168 @@
+```mermaid
+sequenceDiagram
+    participant User
+    participant CLI as bin/testui
+    participant TestApp as Test App<br/>(port 4000)
+    participant Proxy as Proxy Server<br/>(port 9876)
+    participant TD as TestDriver.ai<br/>(npx testdriverai)
+    participant ZAI as Z.ai API<br/>(ANTHROPIC_API_KEY)
+    participant Browser as Selenium Browser
+
+    User->>CLI: testui PROMPT="login with credentials"
+    
+    Note over CLI: Parse arguments<br/>Validate ANTHROPIC_API_KEY
+    
+    CLI->>CLI: checkPort(4000)
+    CLI->>TestApp: spawn('node', ['server.js'])
+    activate TestApp
+    TestApp-->>CLI: Port 4000 listening ✅
+    
+    CLI->>CLI: checkPort(9876)
+    CLI->>Proxy: spawn('node', ['server.js'])
+    activate Proxy
+    Proxy-->>CLI: Port 9876 listening ✅
+    
+    Note over CLI: Build testdriver args:<br/>run --url localhost:4000<br/>--prompt "..."
+    
+    CLI->>TD: spawn('npx', ['testdriverai', 'run'...])
+    activate TD
+    
+    Note over TD: Parse natural language<br/>Generate action plan
+    
+    TD->>Proxy: POST /api/generate<br/>{model, messages, images}
+    activate Proxy
+    Proxy->>ZAI: Forward request<br/>(with ANTHROPIC_API_KEY)
+    activate ZAI
+    ZAI-->>Proxy: AI response<br/>(step-by-step actions)
+    deactivate ZAI
+    Proxy-->>TD: Return AI guidance
+    deactivate Proxy
+    
+    loop For each action
+        TD->>Browser: Execute Selenium command<br/>(click, type, navigate)
+        activate Browser
+        Browser->>TestApp: HTTP request<br/>GET/POST to app
+        TestApp-->>Browser: HTML response
+        Browser-->>TD: Action completed
+        deactivate Browser
+        
+        TD->>Proxy: POST /api/generate<br/>(next step? done?)
+        activate Proxy
+        Proxy->>ZAI: Forward request
+        activate ZAI
+        ZAI-->>Proxy: Next action or completion
+        deactivate ZAI
+        Proxy-->>TD: Continue or finish
+        deactivate Proxy
+    end
+    
+    TD-->>CLI: Exit code (0=success)
+    deactivate TD
+    
+    CLI->>TestApp: kill()
+    deactivate TestApp
+    CLI->>Proxy: kill()
+    deactivate Proxy
+    
+    CLI-->>User: ✅ Test completed<br/>or ❌ Test failed
+
+    Note over User,Browser: Current Flow - TestDriver.ai drives execution<br/>Target Flow - Custom YAML executor with sandbox
+```
+
+## Data Flow Breakdown
+
+### Phase 1: Initialization (Lines 85-150)
+1. User invokes CLI with PROMPT or TEST
+2. CLI validates ANTHROPIC_API_KEY environment variable
+3. CLI spawns test app on port 4000 (if needed)
+4. CLI spawns proxy server on port 9876
+5. CLI waits for ports to be available
+6. CLI builds testdriverai command arguments
+
+### Phase 2: TestDriver Execution (Lines 172-179)
+1. CLI spawns `npx testdriverai run` with:
+   - `--url`: Target application URL
+   - `--prompt`: Natural language test description
+   - `TD_API_ROOT`: Points to proxy (localhost:9876)
+   - `ANTHROPIC_API_KEY`: Passed through environment
+
+### Phase 3: AI-Driven Test Loop
+1. TestDriver sends natural language to proxy
+2. Proxy forwards to Z.ai API with authentication
+3. Z.ai returns action guidance (JSON)
+4. TestDriver translates to Selenium commands
+5. Browser executes commands against test app
+6. Results feed back to Z.ai for next step
+7. Loop continues until test complete or error
+
+### Phase 4: Cleanup (Lines 181-201)
+1. TestDriver exits with code
+2. CLI catches exit event
+3. CLI kills test app process
+4. CLI kills proxy process
+5. CLI exits with TestDriver's exit code
+
+## Current Data Flow Characteristics
+
+### Strengths
+✅ Clean separation of concerns (CLI, proxy, testdriver)
+✅ Proper process lifecycle management
+✅ SIGINT handling for graceful shutdown
+✅ Port availability checking
+
+### Weaknesses
+❌ No credential flow mechanism
+❌ No artifact collection (screenshots, logs)
+❌ No network isolation
+❌ TestDriver controls execution (black box)
+❌ No visibility into generated commands
+❌ Hard dependency on TestDriver.ai format
+
+## Target Data Flow Changes
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant CLI as bin/testui
+    participant LLM as Z.ai API<br/>(YAML Generator)
+    participant Sandbox as Sandbox Runtime<br/>(network isolated)
+    participant Chrome as Chrome in Sandbox<br/>(CDP port 9222)
+    participant Executor as YAML Executor<br/>(Puppeteer)
+    participant App as Test App<br/>(localhost:8080)
+
+    User->>CLI: testui "test login"<br/>USERNAME=admin PASSWORD=secret
+    CLI->>CLI: Parse credentials from env/args
+    CLI->>LLM: Generate YAML from natural language
+    LLM-->>CLI: YAML action sequence
+    CLI->>CLI: Validate YAML schema
+    CLI->>Sandbox: createSandbox({network: ['localhost:8080']})
+    Sandbox-->>CLI: Sandbox ready
+    CLI->>Sandbox: spawn('chromium', ['--remote-debugging-port=9222'])
+    Sandbox-->>CLI: Chrome started (CDP ready)
+    CLI->>Executor: execute(YAML, credentials)
+    
+    loop For each action in YAML
+        Executor->>Chrome: Puppeteer command via CDP
+        Chrome->>App: HTTP request (allowed: localhost:8080)
+        App-->>Chrome: Response
+        Chrome-->>Executor: Action complete
+        Executor->>Executor: Log result + artifact
+    end
+    
+    Executor-->>CLI: Test results + artifacts
+    CLI->>Sandbox: Kill Chrome + cleanup
+    CLI-->>User: ✅ Pass/❌ Fail + artifacts
+```
+
+### Key Changes
+1. **YAML Generation** - Replace TestDriver with LLM → YAML
+2. **Sandbox Wrapper** - Chrome runs in isolated environment
+3. **Custom Executor** - Puppeteer executes YAML actions
+4. **Credential Injection** - Environment variables → YAML placeholders
+5. **Network Isolation** - Only localhost:8080 accessible
+6. **Artifact Collection** - Screenshots, logs saved from sandbox
+
+## Integration Strategy
+
+See `integration-points.md` for detailed implementation plan.
+

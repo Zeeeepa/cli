@@ -1,0 +1,266 @@
+{
+  "current_dependencies": {
+    "runtime": {
+      "node": ">=16.0.0",
+      "npm": ">=8.0.0"
+    },
+    "npm_packages": {
+      "production": {
+        "axios": "^1.6.2",
+        "cors": "^2.8.5",
+        "dotenv": "^16.3.1",
+        "express": "^4.18.2",
+        "express-rate-limit": "^7.1.5",
+        "express-validator": "^7.0.1",
+        "morgan": "^1.10.1",
+        "multer": "^2.0.2",
+        "selenium-webdriver": "^4.16.0",
+        "sharp": "^0.34.4",
+        "uuid": "^9.0.1",
+        "winston": "^3.11.0"
+      },
+      "development": {
+        "nodemon": "^3.0.2"
+      }
+    },
+    "external_tools": {
+      "testdriverai": {
+        "version": "latest",
+        "installation": "via npx (not installed locally)",
+        "purpose": "Browser automation via natural language"
+      },
+      "chromium": {
+        "version": "unknown",
+        "installation": "System-level (required by selenium-webdriver)",
+        "purpose": "Browser automation target"
+      }
+    },
+    "api_services": {
+      "z_ai": {
+        "endpoint": "via ANTHROPIC_API_KEY",
+        "purpose": "LLM for natural language understanding",
+        "authentication": "Bearer token (API key)"
+      },
+      "testdriver_ai": {
+        "endpoint": "Proxied via localhost:9876",
+        "purpose": "TestDriver.ai API (replaced by Z.ai)",
+        "authentication": "Forwarded from Z.ai"
+      }
+    }
+  },
+  "new_dependencies_required": {
+    "phase_1": {
+      "@zeeeepa/sandbox-runtime": {
+        "version": "latest",
+        "purpose": "Network and filesystem isolation for Chrome",
+        "installation": "npm install @zeeeepa/sandbox-runtime",
+        "documentation": "https://github.com/Zeeeepa/sandbox-runtime"
+      },
+      "js-yaml": {
+        "version": "^4.1.0",
+        "purpose": "YAML parsing and generation",
+        "installation": "npm install js-yaml"
+      },
+      "ajv": {
+        "version": "^8.12.0",
+        "purpose": "JSON Schema validation for YAML",
+        "installation": "npm install ajv"
+      }
+    },
+    "phase_2": {
+      "puppeteer-core": {
+        "version": "^21.0.0",
+        "purpose": "Chrome DevTools Protocol automation",
+        "installation": "npm install puppeteer-core",
+        "notes": "Using puppeteer-core (no bundled Chrome) since sandbox spawns Chrome"
+      },
+      "node-fetch": {
+        "version": "^3.3.0",
+        "purpose": "HTTP client for Z.ai API calls",
+        "installation": "npm install node-fetch"
+      }
+    },
+    "development": {
+      "jest": {
+        "version": "^29.7.0",
+        "purpose": "Testing framework for new components",
+        "installation": "npm install --save-dev jest"
+      }
+    }
+  },
+  "z_ai_api_integration": {
+    "current_usage": {
+      "location": "server.js (proxy server)",
+      "method": "HTTP forwarding via axios",
+      "authentication": "ANTHROPIC_API_KEY environment variable",
+      "endpoint": "Unknown (handled by proxy)",
+      "models": "Unknown (handled by TestDriver.ai)"
+    },
+    "target_usage": {
+      "location": "lib/prompt-engine.js (direct integration)",
+      "method": "Direct HTTP calls via node-fetch",
+      "authentication": "ANTHROPIC_API_KEY environment variable",
+      "endpoint": "https://api.z.ai/v1/chat/completions (to be confirmed)",
+      "models": "glm-4.5 (for YAML generation)"
+    },
+    "migration_notes": [
+      "Need to extract Z.ai API endpoint from proxy server code",
+      "Need to understand Z.ai API request/response format",
+      "Need to handle streaming responses (optional)",
+      "Need to implement retry logic for API failures"
+    ]
+  },
+  "playwright_usage": {
+    "current": {
+      "selenium-webdriver": {
+        "version": "^4.16.0",
+        "purpose": "Selenium automation (TestDriver.ai uses this)",
+        "keep": false,
+        "reason": "Will be replaced by Puppeteer + sandbox"
+      }
+    },
+    "target": {
+      "puppeteer-core": {
+        "version": "^21.0.0",
+        "purpose": "CDP-based automation",
+        "advantages": [
+          "Native Chrome DevTools Protocol support",
+          "Better async/await patterns",
+          "Built for headless Chrome",
+          "Works seamlessly with sandbox-wrapped Chrome"
+        ]
+      }
+    },
+    "migration_rationale": [
+      "Puppeteer connects via CDP (localhost:9222) to sandboxed Chrome",
+      "Selenium requires WebDriver server (additional complexity)",
+      "Puppeteer has better TypeScript support and documentation",
+      "TestDriver.ai uses Selenium, but we're replacing TestDriver.ai"
+    ]
+  },
+  "localhost_references": {
+    "search_results": [
+      "bin/testui:110 - 'localhost:4000' (test app port)",
+      "bin/testui:118 - checkPort(4000)",
+      "bin/testui:124 - 'http://localhost:4000' (default app URL)",
+      "bin/testui:150 - 'http://localhost:9876' (proxy server)",
+      "bin/testui:153 - 'http://localhost:4000' (fallback app URL)",
+      "bin/testui:175 - 'TD_API_ROOT: http://localhost:9876'"
+    ],
+    "ports_used": {
+      "4000": "Test application server",
+      "9876": "Proxy server (TestDriver.ai → Z.ai)",
+      "8080": "Target for sandbox integration (configurable)"
+    },
+    "notes": [
+      "Port 4000 is test app default (can be overridden with APP= parameter)",
+      "Port 9876 is proxy server (will be removed in Phase 3)",
+      "Port 8080 is proposed standard for sandbox integration",
+      "Sandbox will restrict Chrome to only localhost:8080 access"
+    ]
+  },
+  "chrome_installation": {
+    "current_requirement": {
+      "chromium_or_chrome": "System-installed",
+      "managed_by": "selenium-webdriver",
+      "detection": "Automatic via WebDriver",
+      "version": "Any recent version"
+    },
+    "sandbox_requirement": {
+      "chromium_or_chrome": "System-installed (same as current)",
+      "managed_by": "sandbox-runtime spawn()",
+      "detection": "Must be in PATH as 'chromium' or 'chromium-browser' or 'google-chrome'",
+      "version": "89+ (for --headless=new support)",
+      "flags_needed": [
+        "--headless=new",
+        "--no-sandbox",
+        "--disable-gpu",
+        "--remote-debugging-port=9222",
+        "--user-data-dir=/tmp/chrome-profile"
+      ]
+    },
+    "installation_check": {
+      "command": "which chromium || which chromium-browser || which google-chrome",
+      "fallback": "Install via: apt-get install chromium-browser (Ubuntu/Debian) or brew install chromium (macOS)"
+    }
+  },
+  "removed_dependencies_phase3": {
+    "testdriverai": {
+      "reason": "Replaced by custom YAML executor",
+      "removal_impact": "Breaking change - TEST= files need migration"
+    },
+    "selenium-webdriver": {
+      "reason": "Replaced by Puppeteer",
+      "removal_impact": "No impact (internal implementation detail)"
+    },
+    "proxy_server_dependencies": {
+      "reason": "Proxy server removed (direct Z.ai integration)",
+      "removal_impact": "Simplifies architecture, removes 9876 port requirement",
+      "affected_packages": [
+        "express",
+        "cors",
+        "express-rate-limit",
+        "express-validator",
+        "morgan",
+        "multer"
+      ]
+    }
+  },
+  "security_considerations": {
+    "credential_handling": {
+      "current": "None (credentials hardcoded in prompts)",
+      "target": "Environment variables + YAML placeholders",
+      "best_practices": [
+        "Never log credential values",
+        "Use ${PLACEHOLDER} syntax in YAML",
+        "Support .env files for local development",
+        "Validate credential format before injection"
+      ]
+    },
+    "network_isolation": {
+      "current": "None (Chrome has full internet access)",
+      "target": "Sandbox-runtime restricts to localhost:8080 only",
+      "validation": "Test that external domains are blocked"
+    },
+    "filesystem_isolation": {
+      "current": "None (Chrome has full filesystem access)",
+      "target": "Sandbox-runtime mounts only /tmp for Chrome cache",
+      "validation": "Test that sensitive paths are inaccessible"
+    }
+  },
+  "validation_commands": {
+    "check_current_dependencies": [
+      "cd testdriver-proxy && npm list --depth=0",
+      "which chromium || which chromium-browser || which google-chrome"
+    ],
+    "test_z_ai_connection": [
+      "curl -H 'Authorization: Bearer $ANTHROPIC_API_KEY' https://api.z.ai/v1/models"
+    ],
+    "test_sandbox_runtime": [
+      "npm list @zeeeepa/sandbox-runtime",
+      "node -e \"console.log(require('@zeeeepa/sandbox-runtime'))\""
+    ],
+    "test_chrome_spawning": [
+      "chromium --headless=new --remote-debugging-port=9222 &",
+      "curl http://localhost:9222/json/version",
+      "killall chromium"
+    ]
+  },
+  "dependency_installation_order": {
+    "phase_1_setup": [
+      "npm install js-yaml ajv",
+      "npm install @zeeeepa/sandbox-runtime"
+    ],
+    "phase_2_setup": [
+      "npm install puppeteer-core node-fetch"
+    ],
+    "development_setup": [
+      "npm install --save-dev jest"
+    ],
+    "validation": [
+      "npm test",
+      "node poc/test-sandbox-chrome.js"
+    ]
+  }
+}
+
