@@ -1,305 +1,472 @@
-## 🚀 Overview
+# TestUI - Next Generation AI-Powered Testing
 
-This PR adds a powerful `testui` command with flexible argument parsing and comprehensive Z.ai setup documentation.
+> Autonomous AI agent for end-to-end testing of web & desktop applications with natural language commands and YAML-based test specifications.
 
-## ✨ New Features
+[![npm version](https://img.shields.io/npm/v/testdriverai.svg)](https://www.npmjs.com/package/testdriverai)
+[![License](https://img.shields.io/badge/license-ISC-blue.svg)](LICENSE)
 
-### testui Command
+## 🚀 Quick Start
+
+### Installation
+
 ```bash
-# Natural language testing
-testui PROMPT="login with demo@testdriver.ai"
-
-# YAML test file execution  
-testui TEST="tests/login.yaml"
-
-# External app testing
-testui APP="http://localhost:3000" PROMPT="test checkout flow"
-
-# Shorthand (positional)
-testui "click all buttons"
-```
-
-**Key Features:**
-- ✅ PROMPT="text" - Natural language test execution
-- ✅ TEST="file.yaml" - YAML test file execution
-- ✅ APP="url" - Test external applications
-- ✅ Positional argument support (shorthand syntax)
-- ✅ Automatic ANTHROPIC_API_KEY validation
-- ✅ Built-in help command (--help, -h)
-- ✅ Proper error handling and cleanup
-- ✅ External app testing capability
-
-### context Command
-- View current page context for debugging
-- Helps understand page structure during test development
-
-## 📖 Updated Documentation
-
-### Clear 4-Step Quick Start
-```bash
-# Step 1: Clone & Install
+# Clone repository
 git clone https://github.com/Zeeeepa/cli.git
-cd cli/testdriver-proxy
+cd cli
+
+# Install dependencies
 npm install
 
-# Step 2: Get Z.ai API Key (Free)
-Visit https://z.ai and sign up
-
-# Step 3: Configure
-export ANTHROPIC_API_KEY="your-zai-api-key"
-echo 'export ANTHROPIC_API_KEY="your-key"' >> ~/.bashrc
-
-# Step 4: Test It!
-testui PROMPT="login with demo@testdriver.ai"
+# Install globally (optional - enables `testui` and `testdriverai` commands)
+npm link
 ```
 
-**Documentation Improvements:**
-- ✅ Z.ai API key setup instructions
-- ✅ ANTHROPIC_API_KEY environment variable explained
-- ✅ Complete usage examples for all scenarios
-- ✅ Persistence configuration (bashrc/zshrc)
-- ✅ All command variations documented
+### Setup API Key
 
-## 🛡️ Robustness & Error Handling
-
-- ✅ Validates ANTHROPIC_API_KEY before starting tests
-- ✅ Clear error messages if API key is missing
-- ✅ Proper cleanup on errors and interrupts
-- ✅ Handles external app testing gracefully
-- ✅ Built-in help documentation
-
-## 🔧 Technical Improvements
-
-**server.js:**
-- Enhanced error handling
-- Better request/response validation
-- Structured logging
-- Timeout handling
-- Graceful degradation
-
-## 📦 Files Changed
-- `testdriver-proxy/bin/testui` (NEW) - Main test command
-- `testdriver-proxy/bin/context` (NEW) - Debug helper
-- `testdriver-proxy/README.md` - Complete rewrite with setup guide
-- `testdriver-proxy/server.js` - Enhanced robustness
-- `testdriver-proxy/package.json` - Updated scripts
-- `testdriver-proxy/.env.example` - Updated configuration
-
-## 🧪 Testing
-
-Tested with:
-- ✅ Z.ai API (GLM-4.5V model)
-- ✅ PROMPT argument parsing
-- ✅ TEST file execution
-- ✅ APP external URL testing
-- ✅ Error handling (missing API key)
-- ✅ Help command
-- ✅ Cleanup on errors and interrupts
-
-## 📝 Usage Examples
+Get your free Z.ai API key at [https://z.ai](https://z.ai)
 
 ```bash
-# Basic testing (auto-starts test app on port 4000)
-testui PROMPT="click all buttons and verify"
-testui PROMPT="login with test@example.com"
+# Configure environment
+export ANTHROPIC_API_URL="https://api.z.ai/v1"
+export ANTHROPIC_API_KEY="your-zai-api-key-here"
+export ANTHROPIC_MODEL="glm-4.5v"
 
-# Test file execution
-testui TEST="path/to/test.yaml"
-testui TEST="tests/login-flow.yaml"
+# Persist to shell config
+echo 'export ANTHROPIC_API_KEY="your-key"' >> ~/.bashrc
+```
 
-# External app testing
-testui APP="http://localhost:3000" PROMPT="test checkout"
-testui APP="https://myapp.com" PROMPT="verify homepage"
+### Your First Test
 
-# Shorthand
-testui "click the signup button"
+```bash
+# Natural language testing
+testui "navigate to google.com and search for testdriver"
+
+# YAML-based test
+testui TEST="tests/login.yaml"
+
+# Test external app
+testui APP="http://localhost:3000" PROMPT="test all features"
 ```
 
 ---
 
-Ready for review and testing! 🎯
+## 📖 Usage
 
-Automate and scale QA with computer-use agents.
+### Command Syntax
 
-[Docs](https://docs.testdriver.ai) | [Website](https://testdriver.ai) | [GitHub Action](https://github.com/marketplace/actions/testdriver-ai) | [Join our Discord](https://discord.com/invite/cWDFW8DzPm)
+TestUI supports multiple invocation styles:
 
-# Install via NPM
+```bash
+# 1. Natural Language (Shorthand)
+testui "login with demo@testdriver.ai"
 
-[Follow the instructions on our docs for more.](https://docs.testdriver.ai/overview/quickstart).
+# 2. Explicit PROMPT syntax
+testui PROMPT="navigate to example.com and click login"
 
-# About
+# 3. YAML Test File
+testui TEST="tests/my-test.yaml"
 
-TestDriver isn't like any test framework you've used before. TestDriver is an OS Agent for QA. TestDriver uses AI vision along with mouse and keyboard emulation to control the entire desktop. It's more like a QA employee than a test framework. This kind of black-box testing has some major advantages:
+# 4. External App Testing
+testui APP="http://localhost:8080" PROMPT="test all UI features"
 
-- **Easier set up:** No need to add test IDs or craft complex selectors
-- **Less Maintenance:** Tests don't break when code changes
-- **More Power:** TestDriver can test any application and control any OS setting
-
-### Demo (Playing Balatro Desktop)
-
-https://github.com/user-attachments/assets/7cb9ee5a-0d05-4ff0-a4fa-084bcee12e98
-
-# Examples
-
-- Test any user flow on any website in any browser
-- Clone, build, and test any desktop app
-- Render multiple browser windows and popups like 3rd party auth
-- Test `<canvas>`, `<iframe>`, and `<video>` tags with ease
-- Use file selectors to upload files to the browser
-- Test chrome extensions
-- Test integrations between applications
-- Integrates into CI/CD via GitHub Actions ($)
-
-Check out [the docs](https://docs.testdriver.ai/).
-
-# Workflow
-
-1. Tell TestDriver what to do in natural language on your local machine using `npm i testdriverai -g`
-2. TestDriver looks at the screen and uses mouse and keyboard emulation to accomplish the goal
-3. Run TestDriver tests on our test infrastructure
-
-# Quickstart
-
-## Initialize TestDriver
-
-In your project directory:
-
-```sh
-npx testdriverai@latest init
+# 5. Help
+testui --help
 ```
 
-## Teach TestDriver a test
+### YAML Test Specification
 
-Let's show TestDriver what we want to test. Run the following command:
-
-```sh
-npx testdriverai@latest .testdriver/test.yaml
-```
-
-## Reset the test state
-
-TestDriver best practice is to start instructing TestDriver with your app in it's initial state. For browsers, this means creating a new tab with the website you want to test.
-
-If you have multiple monitors, make sure you do this on your primary display.
-
-## Instruct TestDriver
-
-Now, just tell TestDriver what you want it to do. For now, stick with single commands like "click sign up" and "scroll down."
-
-Later, try to perform higher level objectives like "complete the onboarding."
+Create structured, repeatable tests with YAML:
 
 ```yaml
-> Click on sign up
-TestDriver Generates a Test
-TestDriver will look at your screen and generate a test script. TestDriver can see the screen, control the mouse, keyboard, and more!
-TestDriver can only see your primary display!
-To navigate to testdriver.ai, we need to focus on the
-Google Chrome application, click on the search bar, type
-the URL, and then press Enter.
+version: "1.0"
+metadata:
+  name: "Login Test"
+  description: "Test user login flow"
 
-Here are the steps:
+sandbox:
+  network:
+    allowedDomains: ["localhost", "127.0.0.1", "example.com"]
+  filesystem:
+    allowWrite: ["./screenshots", "./logs"]
 
-1. Focus on the Google Chrome application.
-2. Click on the search bar.
-3. Type "testdriver.ai".
-4. Press Enter.
+actions:
+  - type: navigate
+    url: "http://localhost:3000"
+    waitUntil: "networkidle"
 
-Let's start with focusing on the Google Chrome application
-and clicking on the search bar.
+  - type: click
+    selector: "#login-button"
+    timeout: 5000
 
-commands:
-  - command: focus-application
-    name: Google Chrome
-  - command: hover-text
-    text: Search Google or type a URL
-    description: main google search
-    action: click
+  - type: type
+    selector: "#email"
+    text: "demo@example.com"
 
-After this, we will type the URL and press Enter.
+  - type: screenshot
+    path: "./screenshots/after-login.png"
+    fullPage: true
+
+  - type: assertExists
+    selector: ".dashboard"
+    message: "Dashboard should be visible after login"
 ```
 
-## TestDriver executes the test script
+### Action Types
 
-TestDriver will execute the commands found in the yml codeblocks of the response.
+| Action | Description | Required Fields |
+|--------|-------------|----------------|
+| `navigate` | Navigate to URL | `url` |
+| `click` | Click element | `selector` |
+| `type` | Type text into input | `selector`, `text` |
+| `wait` | Wait for condition | `condition` (selector/timeout/navigation) |
+| `screenshot` | Capture screenshot | `path` |
+| `evaluate` | Run JavaScript | `script` |
+| `assertExists` | Assert element exists | `selector` |
 
-See the yml TestDriver generated? That's our own schema. You can learn more about it in the [reference](https://docs.testdriver.ai/getting-started/editing).
+---
 
-> Take your hands off the mouse and keyboard while TestDriver executes! TestDriver is not a fan of backseat drivers.
+## 🔒 Sandbox Integration
 
-## Keep going!
+TestUI uses `@anthropic-ai/sandbox-runtime` for secure, sandboxed browser execution.
 
-Feel free to ask TestDriver to perform some more tasks. Every time you prompt TestDriver it will look at your screen and generate more test step to complete your goal.
+### Features
 
-```sh
-> navigate to airbnb.com
-> search for destinations in austin tx
-> click check in
-> select august 8
+- ✅ **Filesystem Restrictions** - Control read/write permissions
+- ✅ **Network Isolation** - Whitelist allowed domains
+- ✅ **Platform Support** - macOS (sandbox-exec) & Linux (bubblewrap)
+- ✅ **Localhost Testing** - Test local development servers
+- ✅ **Security Boundaries** - Prevent unauthorized access
+
+### Sandbox Configuration
+
+```yaml
+sandbox:
+  network:
+    allowedDomains: ["localhost", "127.0.0.1", "*.local"]
+    allowLocalBinding: true
+  
+  filesystem:
+    allowRead: ["."]
+    allowWrite: ["./screenshots", "./logs"]
+    denyRead: ["~/.ssh", "~/.aws", "~/.config"]
+    denyWrite: ["/etc", "/usr", "/System"]
 ```
 
-If something didn't work, you can use `/undo` to remove all of the test steps added since the last prompt.
+### Platform Requirements
 
-## Test the test locally
+**macOS:**
+- macOS 12+ (Monterey, Ventura, Sonoma)
+- `sandbox-exec` (built-in)
+- Chrome/Chromium browser
 
-Now it's time to make sure the test plan works before we deploy it. Use testdriver run to run the test file you just created with /save .
+**Linux:**
+- Ubuntu 20.04+, Debian 11+
+- `bubblewrap` (`sudo apt install bubblewrap`)
+- Chrome/Chromium browser (`sudo apt install chromium-browser`)
 
-```sh
-npx testdriverai@latest run testdriver/test.yaml
-```
+---
 
-Make sure to reset the test state!
-
-## Deploy
-
-Now it's time to deploy your test using our GitHub action! `testdriver init` already did the work for you and will start triggering tests once you commit the new files to your repository.
-
-```sh
-git add .
-git commit -am "Add TestDriver tests"
-gh pr create --web
-```
-
-Your test will run on every commit and the results will be posted as a Dashcam.io video within your GitHub summary! Learn more about deploying on CI [here](https://docs.testdriver.ai/action/setup).
-
-## Using as a Module
-
-TestDriver can also be used programmatically as a Node.js module. This is useful when you want to integrate TestDriver into your own applications or customize the test file paths.
-
-### Custom Test File Paths
-
-By default, TestDriver looks for test files at `testdriver/testdriver.yaml` relative to the current working directory. You can customize this:
-
-```javascript
-const TestDriverAgent = require("testdriverai");
-
-// Option 1: Set default via environment variable
-const agent1 = new TestDriverAgent({
-  TD_DEFAULT_TEST_FILE: "my-tests/integration.yaml",
-});
-
-// Option 2: Explicitly specify test file
-const agent2 = new TestDriverAgent(
-  {},
-  {
-    args: ["path/to/specific/test.yaml"],
-  },
-);
-
-// Option 3: Custom working directory + relative path
-const agent3 = new TestDriverAgent(
-  { TD_DEFAULT_TEST_FILE: "tests/smoke.yaml" },
-  { options: { workingDir: "/path/to/your/project" } },
-);
-
-// Run the test
-await agent1.run();
-```
+## 🛠️ Configuration
 
 ### Environment Variables
 
-You can also set the default test file path using environment variables:
+Create `.env` file:
 
 ```bash
-export TD_DEFAULT_TEST_FILE="custom/path/test.yaml"
-node your-script.js
+# Z.ai API Configuration
+ANTHROPIC_API_URL=https://api.z.ai/v1
+ANTHROPIC_API_KEY=your-key-here
+ANTHROPIC_MODEL=glm-4.5v
+
+# TestUI Configuration
+TESTUI_SANDBOX_ENABLED=true
+TESTUI_VERBOSE=false
+TESTUI_SCREENSHOT_DIR=./screenshots
+TESTUI_LOGS_DIR=./logs
+
+# Performance Tuning
+TESTUI_TIMEOUT=30000
+TESTUI_MAX_RETRIES=3
+
+# Chrome Configuration (optional)
+CHROME_BIN=/path/to/chrome  # Override auto-detection
 ```
+
+### Sandbox Config File
+
+Create `testdriver-proxy/sandbox-config.js`:
+
+```javascript
+module.exports = {
+  network: {
+    allowedDomains: ['localhost', '127.0.0.1', '*.local'],
+    deniedDomains: ['*'],
+    allowLocalBinding: true,
+  },
+  filesystem: {
+    allowRead: ['.'],
+    allowWrite: ['./screenshots', './logs'],
+    denyRead: ['~/.ssh', '~/.aws'],
+    denyWrite: ['/etc', '/usr', '/System'],
+  },
+};
+```
+
+---
+
+## 📊 Examples
+
+### Example 1: Simple Navigation Test
+
+```yaml
+version: "1.0"
+metadata:
+  name: "Google Search Test"
+
+actions:
+  - type: navigate
+    url: "https://google.com"
+  
+  - type: screenshot
+    path: "./screenshots/google-homepage.png"
+```
+
+### Example 2: Form Testing
+
+```yaml
+version: "1.0"
+metadata:
+  name: "Contact Form Test"
+
+actions:
+  - type: navigate
+    url: "http://localhost:3000/contact"
+
+  - type: type
+    selector: "#name"
+    text: "John Doe"
+
+  - type: type
+    selector: "#email"
+    text: "john@example.com"
+
+  - type: click
+    selector: "#submit-button"
+
+  - type: wait
+    condition: "selector"
+    selector: ".success-message"
+    timeout: 5000
+
+  - type: screenshot
+    path: "./screenshots/success.png"
+```
+
+### Example 3: Authentication Flow
+
+```yaml
+version: "1.0"
+metadata:
+  name: "Login Test with Credentials"
+
+actions:
+  - type: navigate
+    url: "http://localhost:8080/login"
+
+  - type: type
+    selector: "#username"
+    text: "admin"
+
+  - type: type
+    selector: "#password"
+    text: "secret123"
+
+  - type: click
+    selector: "#login-btn"
+
+  - type: wait
+    condition: "navigation"
+    timeout: 10000
+
+  - type: assertExists
+    selector: ".dashboard"
+    message: "User should be redirected to dashboard"
+
+  - type: screenshot
+    path: "./screenshots/dashboard.png"
+    fullPage: true
+```
+
+---
+
+## 🧪 Testing & Validation
+
+### Run Tests
+
+```bash
+# Unit tests
+npm test
+
+# Integration tests
+npm run test:integration
+
+# End-to-end tests
+npm run test:e2e
+
+# All tests
+npm run test:all
+```
+
+### Validation
+
+```bash
+# Type checking
+npm run typecheck
+
+# Linting
+npm run lint
+
+# Format code
+npm run format
+```
+
+---
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+**"ANTHROPIC_API_KEY not set"**
+```bash
+export ANTHROPIC_API_KEY="your-key"
+```
+
+**"Chrome binary not found"**
+```bash
+# macOS
+brew install --cask google-chrome
+
+# Linux
+sudo apt install chromium-browser
+
+# Or set custom path
+export CHROME_BIN="/path/to/chrome"
+```
+
+**"Sandbox violation detected"**
+- Check `sandbox-config.js` allowedDomains/filesystem permissions
+- Add required domains to `allowedDomains` array
+- Add required paths to `allowWrite`/`allowRead` arrays
+
+**"Operation not permitted" errors**
+- Ensure sandbox-runtime is installed: `npm install @anthropic-ai/sandbox-runtime`
+- macOS: Verify sandbox-exec is available (built-in macOS 12+)
+- Linux: Install bubblewrap: `sudo apt install bubblewrap`
+
+### Debug Mode
+
+```bash
+# Enable verbose logging
+TESTUI_VERBOSE=true testui "your test query"
+
+# Debug mode
+npm run debug
+```
+
+---
+
+## 📚 API Documentation
+
+### YAMLExecutor Class
+
+```typescript
+import { YAMLExecutor } from './src/yaml-executor/yaml-executor';
+
+const executor = new YAMLExecutor();
+const result = await executor.execute(yamlSpec);
+
+// Result structure
+interface ExecutionResult {
+  success: boolean;
+  duration: number;
+  actionsCompleted: number;
+  error?: {
+    action: number;
+    type: string;
+    message: string;
+  };
+  screenshots: string[];
+  variables: Record<string, any>;
+}
+```
+
+### Schema Validation
+
+```typescript
+import { validateYAMLSpec, safeValidateYAMLSpec } from './src/yaml-executor/yaml-schema';
+
+// Throws on validation error
+const spec = validateYAMLSpec(data);
+
+// Returns validation result
+const result = safeValidateYAMLSpec(data);
+if (result.success) {
+  console.log('Valid spec:', result.data);
+} else {
+  console.error('Validation errors:', result.errors);
+}
+```
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+### Development Setup
+
+```bash
+# Clone and install
+git clone https://github.com/Zeeeepa/cli.git
+cd cli
+npm install
+
+# Run in development mode
+npm run dev
+
+# Run tests
+npm test
+
+# Build
+npm run build
+```
+
+---
+
+## 📄 License
+
+ISC License - see [LICENSE](LICENSE) file for details.
+
+---
+
+## 🔗 Links
+
+- **GitHub Repository:** https://github.com/Zeeeepa/cli
+- **Sandbox Runtime:** https://github.com/Zeeeepa/sandbox-runtime
+- **Z.ai Platform:** https://z.ai
+- **Documentation:** [Coming Soon]
+
+---
+
+## 💡 Support
+
+- **Issues:** https://github.com/Zeeeepa/cli/issues
+- **Discussions:** https://github.com/Zeeeepa/cli/discussions
+
+---
+
+**Built with ❤️ for autonomous AI testing** 🤖🚀
+
+**Version:** 6.1.10  
+**Last Updated:** 2025-10-27
+
