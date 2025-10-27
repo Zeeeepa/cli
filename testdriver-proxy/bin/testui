@@ -186,14 +186,21 @@ async function startTestUI(options) {
     // Determine test execution method
     const appUrl = options.appUrl || 'http://localhost:4000';
     let testDriverArgs;
+    let tmpTestFile = null;
     
     if (options.testFile) {
       log('cyan', `\n3️⃣  Running test from file: ${options.testFile}\n`);
-      testDriverArgs = ['testdriverai', 'run', '--url', appUrl, '--file', options.testFile];
+      testDriverArgs = ['testdriverai', 'run', options.testFile];
     } else if (options.prompt) {
       log('cyan', `\n3️⃣  Running natural language test...\n`);
       log('magenta', `   📝 "${options.prompt}"\n`);
-      testDriverArgs = ['testdriverai', 'run', '--url', appUrl, '--prompt', options.prompt];
+      
+      // Create temporary YAML test file from prompt
+      const yaml = `config:\n  url: ${appUrl}\n\nsteps:\n  - command: navigate\n    prompt: ${options.prompt}\n`;
+      tmpTestFile = path.join(INSTALL_DIR, '.testui-tmp.yaml');
+      fs.writeFileSync(tmpTestFile, yaml);
+      
+      testDriverArgs = ['testdriverai', 'run', tmpTestFile];
     } else {
       log('red', '❌ No test specified! Provide PROMPT or TEST parameter.');
       if (testApp) testApp.kill();
@@ -227,6 +234,11 @@ async function startTestUI(options) {
       // Cleanup sandbox
       await sandbox.cleanup();
       
+      // Clean up temp test file
+      if (tmpTestFile && fs.existsSync(tmpTestFile)) {
+        fs.unlinkSync(tmpTestFile);
+      }
+      
       if (testApp) testApp.kill();
       proxyServer.kill();
       
@@ -242,6 +254,9 @@ async function startTestUI(options) {
     process.on('SIGINT', async () => {
       log('yellow', '\n\n⚠️  Interrupted! Cleaning up...');
       await sandbox.cleanup();
+      if (tmpTestFile && fs.existsSync(tmpTestFile)) {
+        fs.unlinkSync(tmpTestFile);
+      }
       if (testApp) testApp.kill();
       proxyServer.kill();
       process.exit(130);

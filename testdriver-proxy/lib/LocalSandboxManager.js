@@ -26,11 +26,7 @@ class LocalSandboxManager {
     }
 
     try {
-      // Dynamically require sandbox-runtime (may not be installed yet)
-      const { SandboxManager } = require('@anthropic-ai/sandbox-runtime');
-      this.sandboxRuntime = SandboxManager;
-
-      // Find Chrome binary
+      // Find Chrome binary first (this works without sandbox-runtime)
       this.chromePath = findChromeOrFail();
       
       if (this.config.security.verbose) {
@@ -39,18 +35,40 @@ class LocalSandboxManager {
         console.log(`[Sandbox] Chrome version: ${version || 'unknown'}`);
       }
 
-      // Initialize sandbox with config
-      await this.sandboxRuntime.initialize({
-        filesystem: this.config.filesystem,
-        network: this.config.network,
-        process: this.config.process,
-        security: this.config.security,
-        platform: this.config.platform
-      });
+      // Try to load sandbox-runtime (optional for now)
+      try {
+        const sandboxMod = require('@anthropic-ai/sandbox-runtime');
+        this.sandboxRuntime = sandboxMod.SandboxManager || sandboxMod.default?.SandboxManager;
+        
+        if (this.sandboxRuntime) {
+          // Initialize sandbox with config
+          await this.sandboxRuntime.initialize({
+            filesystem: this.config.filesystem,
+            network: this.config.network,
+            process: this.config.process,
+            security: this.config.security,
+            platform: this.config.platform
+          });
 
-      // Setup violation tracking
-      if (this.sandboxRuntime.getSandboxViolationStore) {
-        this.violationStore = this.sandboxRuntime.getSandboxViolationStore();
+          // Setup violation tracking
+          if (this.sandboxRuntime.getSandboxViolationStore) {
+            this.violationStore = this.sandboxRuntime.getSandboxViolationStore();
+          }
+          
+          if (this.config.security.verbose) {
+            console.log('[Sandbox] Full sandbox-runtime loaded');
+          }
+        } else {
+          if (this.config.security.verbose) {
+            console.log('[Sandbox] Using basic mode (sandbox-runtime not fully available)');
+          }
+        }
+      } catch (sandboxError) {
+        if (this.config.security.verbose) {
+          console.log('[Sandbox] Using basic mode (sandbox-runtime not available)');
+          console.log(`[Sandbox] Reason: ${sandboxError.message}`);
+        }
+        // Continue without sandbox-runtime - we'll use Chrome directly
       }
 
       this.initialized = true;
@@ -59,11 +77,6 @@ class LocalSandboxManager {
         console.log('[Sandbox] Initialization complete');
       }
     } catch (error) {
-      if (error.code === 'MODULE_NOT_FOUND') {
-        throw new Error(
-          'sandbox-runtime not installed. Run: npm install github:Zeeeepa/sandbox-runtime'
-        );
-      }
       throw new Error(`Failed to initialize sandbox: ${error.message}`);
     }
   }

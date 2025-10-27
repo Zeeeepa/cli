@@ -9,12 +9,24 @@ const createSandbox = (emitter, analytics) => {
     class LocalSandboxStub {
       constructor() {
         this.isLocal = true;
+        this.instanceId = 'local-sandbox-' + Date.now();
+        this.instance = {
+          id: this.instanceId,
+          status: 'running',
+          ip: '127.0.0.1',
+          type: 'local'
+        };
       }
       
       async boot() {
         // No-op: Local sandbox initialized in testui script
         console.log('[Sandbox] Using local sandbox-runtime (not remote WebSocket)');
-        return true;
+        return {
+          sandbox: {
+            instanceId: this.instanceId,
+            instance: this.instance
+          }
+        };
       }
       
       async auth() {
@@ -22,11 +34,23 @@ const createSandbox = (emitter, analytics) => {
       }
       
       async connect() {
-        return { status: 'local' };
+        return { 
+          status: 'local',
+          instanceId: this.instanceId,
+          instance: this.instance
+        };
       }
       
-      send() {
-        // No-op for local mode
+      send(config) {
+        // Return sandbox info for local mode
+        if (config && config.type === 'create') {
+          return Promise.resolve({
+            sandbox: {
+              instanceId: this.instanceId,
+              instance: this.instance
+            }
+          });
+        }
         return Promise.resolve({});
       }
     }
