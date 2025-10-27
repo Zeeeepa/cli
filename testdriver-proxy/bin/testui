@@ -4,6 +4,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
+const { getInstance: getSandboxManager } = require('../lib/LocalSandboxManager');
 
 const INSTALL_DIR = path.join(__dirname, '..');
 const TEST_APP_DIR = path.join(INSTALL_DIR, 'tests', 'ui', 'test-app');
@@ -95,6 +96,39 @@ async function startTestUI(options) {
     process.exit(1);
   }
   
+  // Initialize local sandbox
+  log('cyan', '🔐 Initializing local sandbox...');
+  const sandbox = getSandboxManager();
+  
+  try {
+    await sandbox.initialize();
+    await sandbox.setupDirectories();
+    log('green', '✅ Sandbox ready with Chrome');
+    
+    // Extract and add domain from prompt/URL to allowed list
+    if (options.prompt) {
+      const domainMatch = options.prompt.match(/(?:on|visit|test)\s+((?:https?:\/\/)?[\w.-]+(?::\d+)?)/i);
+      if (domainMatch) {
+        const domain = domainMatch[1].replace(/^https?:\/\//, '');
+        sandbox.addAllowedDomain(domain);
+        log('blue', `   📍 Allowed domain: ${domain}`);
+      }
+    }
+    
+    if (options.appUrl) {
+      const urlDomain = options.appUrl.replace(/^https?:\/\//, '').split('/')[0];
+      sandbox.addAllowedDomain(urlDomain);
+      log('blue', `   📍 Allowed domain: ${urlDomain}`);
+    }
+  } catch (error) {
+    log('red', `❌ Sandbox initialization failed: ${error.message}`);
+    log('yellow', '\n💡 Troubleshooting:');
+    log('cyan', '   1. Ensure Chrome/Chromium is installed');
+    log('cyan', '   2. Run: npm install github:Zeeeepa/sandbox-runtime');
+    log('cyan', '   3. On Linux: sudo apt install bubblewrap chromium-browser\n');
+    process.exit(1);
+  }
+  
   const startOwnApp = !options.appUrl;
   let testApp, proxyServer;
   
@@ -173,14 +207,26 @@ async function startTestUI(options) {
       env: { 
         ...process.env, 
         TD_API_ROOT: 'http://localhost:9876',
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY
+        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+        USE_LOCAL_SANDBOX: 'true',
+        SANDBOXED_CHROME_PATH: sandbox.getChromePath()
       },
       stdio: 'inherit'
     });
     
-    testDriver.on('exit', (code) => {
+    testDriver.on('exit', async (code) => {
       log('blue', '\n─────────────────────────────────────────────');
       log('yellow', '\n🧹 Cleaning up...');
+      
+      // Check for sandbox violations
+      if (sandbox.hasViolations()) {
+        log('yellow', '\n⚠️  Sandbox violations detected:');
+        console.log(sandbox.getViolationMessage());
+      }
+      
+      // Cleanup sandbox
+      await sandbox.cleanup();
+      
       if (testApp) testApp.kill();
       proxyServer.kill();
       
@@ -193,8 +239,9 @@ async function startTestUI(options) {
     });
     
     // Handle cleanup on interrupt
-    process.on('SIGINT', () => {
+    process.on('SIGINT', async () => {
       log('yellow', '\n\n⚠️  Interrupted! Cleaning up...');
+      await sandbox.cleanup();
       if (testApp) testApp.kill();
       proxyServer.kill();
       process.exit(130);
