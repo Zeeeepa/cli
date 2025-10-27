@@ -27,6 +27,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@anthropic-ai/sandbox-runtime": "^0.0.1",
     "@anthropic-ai/sdk": "^0.65.0",
     "@npmcli/redact": "^3.2.2",
     "@oclif/core": "^4.5.0",
@@ -56,6 +57,7 @@
     "multer": "^2.0.2",
     "open": "^10.1.2",
     "pixelmatch": "^7.1.0",
+    "puppeteer": "^24.26.1",
     "remark-parse": "^11.0.0",
     "sanitize-filename": "^1.6.3",
     "sharp": "^0.34.4",
@@ -63,7 +65,8 @@
     "tmp": "^0.2.3",
     "winston": "^3.18.3",
     "winston-transport": "^4.9.0",
-    "ws": "^8.18.1"
+    "ws": "^8.18.1",
+    "zod": "^3.25.76"
   },
   "overrides": {
     "glob": "^11.0.1",
@@ -95,5 +98,18 @@
     ],
     "topicSeparator": " ",
     "default": "edit"
-  }
+  },
+  "directories": {
+    "doc": "docs",
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Zeeeepa/cli.git"
+  },
+  "keywords": [],
+  "bugs": {
+    "url": "https://github.com/Zeeeepa/cli/issues"
+  },
+  "homepage": "https://github.com/Zeeeepa/cli#readme"
 }
