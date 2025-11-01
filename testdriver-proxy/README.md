@@ -1,56 +1,101 @@
-# TestUI - AI-Powered Test Automation
+# TestDriver.ai Proxy Server v2.0
 
-> **Natural language test automation powered by AI vision models**  
-> Write tests in plain English • Run anywhere • Works with any LLM
+> **Full-featured proxy server for TestDriver.ai with 100% command coverage**  
+> Natural language → YAML test commands • Multi-LLM support • Production ready
 
 [![Node.js](https://img.shields.io/badge/Node.js-16+-green.svg)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![TestDriver](https://img.shields.io/badge/TestDriver-Compatible-orange.svg)](https://testdriver.ai)
+[![Version](https://img.shields.io/badge/Version-2.0.0-blue.svg)](https://github.com/Zeeeepa/cli)
 
 ---
 
 ## 📋 Table of Contents
 
 - [Overview](#overview)
+- [What's New in v2.0](#whats-new-in-v20)
 - [Quick Start](#quick-start)
 - [Installation](#installation)
-- [Usage](#usage)
-- [Windows Support](#windows-support)
-- [AI Agent Integration](#ai-agent-integration)
-- [Examples](#examples)
+- [API Reference](#api-reference)
 - [Configuration](#configuration)
-- [Deployment](#deployment)
+- [Docker Deployment](#docker-deployment)
 - [Testing](#testing)
 - [Architecture](#architecture)
-- [API Reference](#api-reference)
+- [Migration from v1.0](#migration-from-v10)
 - [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
 
 ---
 
 ## 🚀 Overview
 
-### What is TestUI?
+### What is TestDriver.ai Proxy Server?
 
-TestUI is a natural language interface for browser automation and UI testing. Simply describe what you want to test, and TestUI generates and executes the test automatically using AI vision models.
+A production-ready proxy server that translates TestDriver.ai API calls to any LLM API (Anthropic, OpenAI, Z.ai, custom). Enables you to use TestDriver.ai with your preferred AI models.
 
-### Key Features
+### Why Use This?
 
-- ✅ **Natural Language** - Write tests in plain English
-- ✅ **AI Vision** - GLM-4.5V model for UI understanding  
-- ✅ **Cross-Platform** - Works on Windows, macOS, Linux
+- ✅ **100% Command Coverage** - All 20 TestDriver commands supported
 - ✅ **Multi-LLM Support** - Anthropic, OpenAI, Z.ai, custom APIs
-- ✅ **Auto-Cleanup** - Temp files cleaned automatically
-- ✅ **URL Aware** - Include URLs directly in prompts
-- ✅ **Production Ready** - Docker, CI/CD, monitoring
+- ✅ **Complete Lifecycle** - provision, prerun, postrun hooks
+- ✅ **Performance Tracking** - Built-in metrics and analysis
+- ✅ **Playwright Integration** - act, locate, toMatchPrompt endpoints
+- ✅ **Production Ready** - Docker, monitoring, comprehensive error handling
+- ✅ **Cost Efficient** - Separate generation & vision models
+- ✅ **Self-Hosted** - Full control over your testing infrastructure
 
 ### Technology Stack
 
 - **Runtime:** Node.js 16+
 - **Framework:** Express.js  
-- **AI Models:** Anthropic Claude, GLM-4.5V, OpenAI GPT-4
-- **Testing:** TestDriver.ai, Jest, Playwright
-- **Logging:** Winston
+- **AI Models:** Anthropic Claude, GLM-4.5V/4.6, OpenAI GPT-4
+- **Testing:** Jest, comprehensive test suite
+- **Logging:** Winston with request tracking
 - **Containerization:** Docker & Docker Compose
+
+---
+
+## 🎉 What's New in v2.0
+
+### **Major Version Upgrade: v1.0.0 → v2.0.0**
+
+**Release Date:** 2025-11-01
+
+#### **Code Growth:**
+```
+Lines:     1046 → 1537 (+491 lines, +46.9%)
+Endpoints: 7 → 16 (+9 endpoints, +128.6%)
+Commands:  ~10 → 20 (100% coverage)
+```
+
+#### **New Features:**
+
+**1. Complete Command Support (20/20 commands)**
+- **Core:** type, press-keys, click, hover, drag
+- **Vision:** hover-text, hover-image, match-image, wait-for-text, wait-for-image
+- **Scrolling:** scroll, scroll-until-text, scroll-until-image
+- **Testing:** assert, remember, wait
+- **Advanced:** exec, focus-application, if, run
+
+**2. Lifecycle Management (3 new endpoints)**
+- `POST /lifecycle/provision` - Sandbox initialization
+- `POST /lifecycle/prerun` - Test preparation
+- `POST /lifecycle/postrun` - Cleanup and reporting
+
+**3. Performance Tracking (1 new endpoint)**
+- `POST /performance` - Execution metrics and analysis
+
+**4. Playwright Integration (3 new endpoints)**
+- `POST /playwright/act` - Natural language → YAML
+- `POST /playwright/locate` - Element coordinate detection
+- `POST /playwright/toMatchPrompt` - Visual assertions
+
+**5. Advanced Features**
+- Variable storage with `remember` command
+- Conditional execution with `if` command
+- File inclusion with `run` command
+- Method switching (ai vs turbo)
+- Enhanced options (invert, async, silent)
 
 ---
 
@@ -72,11 +117,15 @@ cd cli/testdriver-proxy
 # Install dependencies
 npm install
 
-# Set your API key
-export ANTHROPIC_API_KEY="your-key-here"
+# Configure your API
+cp .env.example .env
+# Edit .env with your API credentials
 
-# Run your first test!
-npm run testui "visit example.com and get the page title"
+# Start the server
+npm start
+
+# Test it
+curl http://localhost:3000/health
 ```
 
 That's it! 🎉
@@ -85,293 +134,313 @@ That's it! 🎉
 
 ## 📦 Installation
 
-### Method 1: NPM Scripts (Recommended)
+### Method 1: NPM (Recommended)
 
 ```bash
-cd testdriver-proxy
+# Install dependencies
 npm install
 
-# Use npm scripts
-npm run testui "your test instruction"
-npm run test-ui "alternative alias"
-npm run ui "shortest alias"
+# Development mode (auto-reload)
+npm run dev
+
+# Production mode
+npm start
+
+# With specific port
+PORT=8080 npm start
 ```
 
-### Method 2: Global Install
+### Method 2: Docker
 
 ```bash
-cd testdriver-proxy
+# Build image
+docker build -t testdriver-proxy .
+
+# Run container
+docker run -d \
+  -p 3000:3000 \
+  -e ANTHROPIC_API_KEY="your-key" \
+  testdriver-proxy
+
+# Or use Docker Compose
+docker-compose up -d
+```
+
+### Method 3: Global CLI
+
+```bash
+# Install testui CLI globally
 npm install -g .
 
-# Now use 'testui' from anywhere!
-cd ~/my-project
-testui "test my app"
-
-cd ~/another-project
-testui "visit localhost:3000 and click buttons"
-```
-
-### Method 3: Direct Binary
-
-```bash
-./bin/testui "your test instruction"
-```
-
-### Quick Command Reference
-
-| Command | Usage | Benefits |
-|---------|-------|----------|
-| `npm run testui "..."` | ⭐ **Recommended** | Easy to remember, works from testdriver-proxy dir |
-| `npm run test-ui "..."` | Alternative | Kebab-case style |
-| `npm run ui "..."` | Shortest | Quick typing |
-| `testui "..."` | After global install | Works from ANY directory |
-| `./bin/testui "..."` | Direct binary | Traditional approach |
-
----
-
-## 🎯 Usage
-
-### Three Ways to Run TestUI
-
-#### Option 1: Generate & Run New Test
-
-```bash
-npm run testui "go to myapp.com, click login, and verify dashboard loads"
-```
-
-#### Option 2: Upgrade Existing Test
-
-```bash
-npm run testui "upgrade ./tests/login.yaml to include error handling"
-```
-
-#### Option 3: Run Existing Test
-
-```bash
-npm run testui "./tests/checkout-flow.yaml"
-```
-
-### Usage Patterns
-
-**Natural Language Testing:**
-```bash
-# AI generates YAML from your description
-npm run testui "test login on https://myapp.com"
-npm run testui "click all buttons and verify they work"
-npm run ui "navigate to google.com and search for AI"
-```
-
-**File Operations:**
-```bash
-# Execute pre-written YAML tests
-npm run testui "./tests/checkout-flow.yaml"
-npm run testui "./tests/login-test.yaml"
-```
-
-**Enhance Existing Tests:**
-```bash
-# Combine file + prompt to upgrade tests
-npm run testui "./tests/login.yaml also verify logout works"
-npm run testui "./tests/checkout.yaml add promo code validation"
-```
-
-### Local Development Testing
-
-```bash
-# Start your app
-npm run dev  # App runs on localhost:3000
-
-# Test it with TestUI
-npm run testui "visit localhost:3000, click 'Sign Up', fill email with test@example.com"
+# Use anywhere
+testui "visit example.com and get the page title"
 ```
 
 ---
 
-## 🪟 Windows Support
+## 🔌 API Reference
 
-### ✅ Fully Supported!
+### Base URL
 
-TestUI works perfectly on Windows thanks to Node.js cross-platform compatibility.
-
-#### Windows Setup
-
-**PowerShell:**
-```powershell
-# Clone and install
-git clone https://github.com/Zeeeepa/cli.git
-cd cli\testdriver-proxy
-npm install
-
-# Set API key (PowerShell)
-$env:ANTHROPIC_API_KEY="your-key-here"
-
-# Run tests!
-npm run testui "visit google.com and search"
+```
+http://localhost:3000
 ```
 
-**Command Prompt:**
-```cmd
-# Set API key (CMD)
-set ANTHROPIC_API_KEY=your-key-here
+### Health Checks
 
-# Run tests
-npm run testui "test my app"
-```
-
-#### Windows Considerations
-
-- ✅ Node.js scripts work identically
-- ✅ Path handling is automatic
-- ✅ npm scripts work the same
-- ⚠️ Bash scripts (`.sh` files) may need Git Bash or WSL
-
----
-
-## 🤖 AI Agent Integration
-
-### Integration Methods
-
-TestUI can be integrated into AI agents in three ways:
-
-### Option 1: Subprocess Execution
-
-```python
-import subprocess
-import json
-
-def run_ui_test(instruction: str) -> dict:
-    """Execute UI test via TestUI"""
-    result = subprocess.run(
-        ["npm", "run", "testui", instruction],
-        cwd="/path/to/testdriver-proxy",
-        capture_output=True,
-        text=True
-    )
-    
-    return {
-        "status": "success" if result.returncode == 0 else "failed",
-        "output": result.stdout,
-        "errors": result.stderr
-    }
-
-# Usage
-result = run_ui_test("test login flow on myapp.com")
-print(result)
-```
-
-### Option 2: MCP Server Integration
-
-```python
-from mcp.server import Server
-from mcp.types import Tool, TextContent
-
-# Create MCP server for TestUI
-server = Server("testui-server")
-
-@server.list_tools()
-async def list_tools() -> list[Tool]:
-    return [
-        Tool(
-            name="ui_test",
-            description="Run UI tests using natural language",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "instruction": {"type": "string"}
-                }
-            }
-        )
-    ]
-
-@server.call_tool()
-async def call_tool(name: str, arguments: dict):
-    if name == "ui_test":
-        result = subprocess.run(
-            ["npm", "run", "testui", arguments["instruction"]],
-            cwd="/path/to/testdriver-proxy",
-            capture_output=True,
-            text=True
-        )
-        return [TextContent(type="text", text=result.stdout)]
-```
-
-### Option 3: Custom Agent Framework
-
-```python
-class UITestingAgent:
-    def __init__(self, testui_path: str):
-        self.testui_path = testui_path
-    
-    def test_interface(self, instruction: str):
-        """Execute UI test from natural language"""
-        result = subprocess.run(
-            [f"{self.testui_path}/bin/testui", instruction],
-            capture_output=True,
-            text=True
-        )
-        
-        # Parse results
-        if "✅" in result.stdout:
-            return {"status": "passed", "output": result.stdout}
-        else:
-            return {"status": "failed", "output": result.stdout}
-
-# Usage
-agent = UITestingAgent("/path/to/testdriver-proxy")
-result = agent.test_interface("test login flow")
-```
-
----
-
-## 🎨 Real-World Examples
-
-### E-commerce Testing
-
+**GET `/health`** - Quick health check
 ```bash
-npm run testui "go to mystore.com, search for 'iPhone 15', add first result to cart, and verify cart shows 1 item"
+curl http://localhost:3000/health
 ```
 
-### Form Validation
-
+**GET `/health/full`** - Deep health check with API connectivity test
 ```bash
-npm run testui "visit signup.myapp.com, enter invalid email 'notanemail', submit, and check for error message"
+curl http://localhost:3000/health/full
 ```
 
-### Data Extraction
+### Core Endpoints
 
-```bash
-npm run testui "go to news.ycombinator.com and extract top 5 story titles with point counts"
+#### 1. Convert Natural Language to YAML
+
+**POST `/api/:version/testdriver/input`**
+
+Convert natural language test instructions into executable YAML commands.
+
+**Request:**
+```json
+{
+  "input": "click the login button, type my email, press enter",
+  "mousePosition": {"x": 100, "y": 200},
+  "activeWindow": "Chrome",
+  "image": "base64_screenshot_data"
+}
 ```
 
-### GitHub Repository Analysis
-
-```bash
-npm run testui "visit github.com/microsoft/playwright and extract description, star count, and fork count"
+**Response:**
+```json
+{
+  "markdown": "```yaml\n- command: hover-text\n  text: \"Login\"\n  action: click\n- command: type\n  text: \"user@example.com\"\n- command: press-keys\n  keys: [\"enter\"]\n```",
+  "raw": {...}
+}
 ```
 
-### Wikipedia Research
+**Supported Commands (20 total):**
+- type, press-keys, click, hover, drag
+- hover-text, hover-image, match-image, wait-for-text, wait-for-image
+- scroll, scroll-until-text, scroll-until-image
+- assert, remember, wait
+- exec, focus-application, if, run
 
-```bash
-npm run testui "search wikipedia for 'artificial intelligence', click first result, extract first paragraph"
+#### 2. Error Recovery
+
+**POST `/api/:version/testdriver/error`**
+
+AI-powered error analysis and recovery suggestions.
+
+**Request:**
+```json
+{
+  "error": "Button not found: Submit",
+  "previousCommands": [...],
+  "context": "Attempting to submit form",
+  "image": "base64_screenshot_data"
+}
 ```
 
-### Multi-Step Authentication
+#### 3. Task Verification
 
-```bash
-npm run testui "go to app.mysite.com, enter email 'user@test.com', click continue, enter password 'pass123', submit, verify dashboard"
+**POST `/api/:version/testdriver/check`**
+
+Verify that a task was completed successfully.
+
+**Request:**
+```json
+{
+  "instruction": "verify user logged in",
+  "context": "After login attempt",
+  "image": "base64_screenshot_data"
+}
 ```
 
-### Google Search Automation
+#### 4. Test Generation
 
-```bash
-npm run testui "go to google.com, search for 'test automation tools', get top 5 results"
+**POST `/api/:version/testdriver/generate`**
+
+Generate comprehensive test scenarios.
+
+**Request:**
+```json
+{
+  "prompt": "Generate test scenarios for login page",
+  "context": "E-commerce website"
+}
 ```
 
-### Complex Workflows
+#### 5. Natural Language Assertions
 
-```bash
-npm run testui "visit shopify demo store, add 3 items to cart, apply discount code TEST10, proceed to checkout, verify total is reduced"
+**POST `/api/:version/testdriver/assert`**
+
+Vision-based assertion validation.
+
+**Request:**
+```json
+{
+  "expect": "login form is visible",
+  "context": "After page load",
+  "image": "base64_screenshot_data"
+}
 ```
+
+### Lifecycle Endpoints
+
+#### 6. Provision Script
+
+**POST `/api/:version/testdriver/lifecycle/provision`**
+
+Execute provision.yaml when sandbox is created.
+
+**Request:**
+```json
+{
+  "sessionId": "test-session-001",
+  "yamlContent": "version: 6.0.0\nsteps: [...]"
+}
+```
+
+**Response:**
+```json
+{
+  "markdown": "### Execution Summary\n...",
+  "status": "completed",
+  "sessionId": "test-session-001"
+}
+```
+
+#### 7. Prerun Script
+
+**POST `/api/:version/testdriver/lifecycle/prerun`**
+
+Execute prerun.yaml before each test.
+
+#### 8. Postrun Script
+
+**POST `/api/:version/testdriver/lifecycle/postrun`**
+
+Execute postrun.yaml after tests complete.
+
+### Performance Endpoint
+
+#### 9. Performance Analysis
+
+**POST `/api/:version/testdriver/performance`**
+
+Analyze test execution performance.
+
+**Request:**
+```json
+{
+  "operations": [
+    {"command": "hover-text", "duration": 1500},
+    {"command": "type", "duration": 200}
+  ],
+  "timings": {"totalDuration": 5000},
+  "networkActivity": {"requests": 12}
+}
+```
+
+**Response:**
+```json
+{
+  "markdown": "### Performance Analysis\n...",
+  "metrics": {
+    "totalOperations": 4,
+    "totalDuration": 5000,
+    "averageOperationTime": "1250.00ms",
+    "networkRequests": 12
+  }
+}
+```
+
+### Playwright Integration
+
+#### 10. Act - Convert Action to YAML
+
+**POST `/api/:version/testdriver/playwright/act`**
+
+Convert natural language action to executable YAML.
+
+**Request:**
+```json
+{
+  "action": "click the submit button",
+  "pageUrl": "https://example.com/form",
+  "image": "base64_screenshot_data"
+}
+```
+
+#### 11. Locate - Find Element Coordinates
+
+**POST `/api/:version/testdriver/playwright/locate`**
+
+Find element coordinates using natural language.
+
+**Request:**
+```json
+{
+  "description": "search input field",
+  "pageUrl": "https://example.com",
+  "image": "base64_screenshot_data"
+}
+```
+
+**Response:**
+```json
+{
+  "coordinates": {
+    "x": 150,
+    "y": 200,
+    "width": 300,
+    "height": 40,
+    "confidence": 0.95
+  }
+}
+```
+
+#### 12. toMatchPrompt - Visual Assertion
+
+**POST `/api/:version/testdriver/playwright/toMatchPrompt`**
+
+Visual assertion using natural language.
+
+**Request:**
+```json
+{
+  "prompt": "login form is visible",
+  "pageUrl": "https://example.com/login",
+  "image": "base64_screenshot_data"
+}
+```
+
+**Response:**
+```json
+{
+  "matched": true,
+  "confidence": 0.92,
+  "reason": "The screenshot shows a login form..."
+}
+```
+
+### Additional Endpoints
+
+#### 13-14. Hover (Text/Image)
+
+**POST `/api/:version/testdriver/hover/text`** - Find text coordinates  
+**POST `/api/:version/testdriver/hover/image`** - Find image coordinates
+
+#### 15-16. Root & Documentation
+
+**GET `/`** - API documentation  
+**GET `/health/full`** - Deep health check
 
 ---
 
@@ -379,467 +448,496 @@ npm run testui "visit shopify demo store, add 3 items to cart, apply discount co
 
 ### Environment Variables
 
-```bash
-# Required - API Key (use ONE of these)
-export ANTHROPIC_API_KEY="your-api-key"
-export ANTHROPIC_AUTH_TOKEN="your-token"
-export ZAI_API_KEY="your-zai-key"
-export OPENAI_API_KEY="your-openai-key"
+Create a `.env` file:
 
-# Optional - Server Configuration
-export PORT=8080                    # Proxy server port (default: 8080)
-export TESTUI_PROXY_PORT=9876      # TestUI internal port
-export MODEL=claude-3-opus         # Override AI model
-export LOG_LEVEL=info              # Logging level
-
-# Optional - TestDriver Configuration
-export TD_API_KEY="your-td-key"    # TestDriver.ai API key
-export TD_API_ROOT="custom-url"    # Custom TestDriver endpoint
-```
-
-### Configuration File
-
-Create `.env` file in `testdriver-proxy/`:
-
-```bash
-# Copy example
-cp .env.example .env
-
-# Edit with your settings
-nano .env
-```
-
-Example `.env`:
-
-```bash
-# API Configuration
-ANTHROPIC_API_KEY=sk-ant-xxxxx
-MODEL=claude-3-5-sonnet-20241022
-
-# Server Configuration  
-PORT=8080
+```env
+# Server Configuration
+PORT=3000
+DEBUG=true
 LOG_LEVEL=info
 
-# TestDriver.ai (optional)
-TD_API_KEY=td_xxxxx
+# API Provider (zai, anthropic, openai)
+API_PROVIDER=zai
+API_KEY=your-api-key-here
+ANTHROPIC_API_KEY=your-api-key-here  # Alternative
+
+# API Base URL
+API_BASE_URL=https://api.z.ai/api/anthropic
+
+# Models
+GENERATION_MODEL=glm-4.6   # Text-only, faster
+VISION_MODEL=glm-4.5V      # Vision model, accurate
+MODEL=glm-4.5V             # Default model
+
+# LLM Configuration
+MAX_TOKENS=4000
+TEMPERATURE=0.7
+
+# Rate Limiting
+RATE_LIMIT_WINDOW_MS=900000  # 15 minutes
+RATE_LIMIT_MAX_REQUESTS=100
 ```
 
-### Custom Port
+### Supported API Providers
 
-If default port is in use:
+#### Z.ai (Recommended)
+```env
+API_PROVIDER=zai
+API_KEY=your-zai-key
+API_BASE_URL=https://api.z.ai/api/anthropic
+GENERATION_MODEL=glm-4.6
+VISION_MODEL=glm-4.5V
+```
 
-```bash
-PORT=3000 npm start
-# or
-TESTUI_PROXY_PORT=3000 npm run testui "test my app"
+#### Anthropic Claude
+```env
+API_PROVIDER=anthropic
+ANTHROPIC_API_KEY=your-claude-key
+API_BASE_URL=https://api.anthropic.com
+MODEL=claude-3-5-sonnet-20241022
+```
+
+#### OpenAI
+```env
+API_PROVIDER=openai
+API_KEY=your-openai-key
+API_BASE_URL=https://api.openai.com/v1
+MODEL=gpt-4-vision-preview
+```
+
+#### Custom API
+```env
+API_PROVIDER=custom
+API_KEY=your-api-key
+API_BASE_URL=https://your-api.com/v1
+MODEL=your-model-name
 ```
 
 ---
 
-## 🚀 Deployment
+## 🐳 Docker Deployment
 
-### Local Development
-
-```bash
-# Start development server
-npm run dev
-
-# Start with custom port
-PORT=3000 npm run dev
-```
-
-### Docker Deployment
-
-#### Build Image
-
-```bash
-# Build Docker image
-docker build -t testui:latest .
-
-# Or use Docker Compose
-docker-compose build
-```
-
-#### Run Container
-
-```bash
-# Run with Docker
-docker run -p 8080:8080 \
-  -e ANTHROPIC_API_KEY="your-key" \
-  testui:latest
-
-# Or with Docker Compose
-docker-compose up -d
-```
-
-#### Docker Compose Configuration
-
-`docker-compose.yml`:
+### Docker Compose (Recommended)
 
 ```yaml
 version: '3.8'
 
 services:
-  testui:
+  testdriver-proxy:
     build: .
+    container_name: testdriver-proxy
     ports:
-      - "8080:8080"
+      - "3000:3000"
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - PORT=8080
-      - LOG_LEVEL=info
-    volumes:
-      - ./tests:/app/tests
+      - API_PROVIDER=zai
+      - API_KEY=${API_KEY}
+      - API_BASE_URL=https://api.z.ai/api/anthropic
+      - GENERATION_MODEL=glm-4.6
+      - VISION_MODEL=glm-4.5V
+      - DEBUG=true
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - ./logs:/app/logs
+
+  # Optional: Chrome Debug Container
+  chrome-debug:
+    build: ./docker
+    container_name: chrome-debug
+    ports:
+      - "3003:3003"
+    restart: unless-stopped
+    environment:
+      - DISPLAY=:99
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3003/json/version"]
       interval: 30s
       timeout: 10s
       retries: 3
 ```
 
-### Production Deployment
-
-#### Prerequisites
-
-- Server with Node.js 16+ or Docker
-- SSL certificate (Let's Encrypt recommended)
-- Reverse proxy (Nginx/Caddy)
-
-#### Nginx Configuration
-
-```nginx
-server {
-    listen 80;
-    server_name testui.yourdomain.com;
-
-    location / {
-        proxy_pass http://localhost:8080;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
+**Start:**
+```bash
+docker-compose up -d
 ```
 
-#### PM2 Process Manager
+**Check logs:**
+```bash
+docker-compose logs -f testdriver-proxy
+```
+
+**Stop:**
+```bash
+docker-compose down
+```
+
+### Standalone Docker
 
 ```bash
-# Install PM2
-npm install -g pm2
+# Build
+docker build -t testdriver-proxy:2.0 .
 
-# Start with PM2
-pm2 start server.js --name testui
+# Run
+docker run -d \
+  --name testdriver-proxy \
+  -p 3000:3000 \
+  -e API_PROVIDER=zai \
+  -e API_KEY="your-key" \
+  -e GENERATION_MODEL=glm-4.6 \
+  -e VISION_MODEL=glm-4.5V \
+  testdriver-proxy:2.0
 
-# Configure auto-restart
-pm2 startup
-pm2 save
+# View logs
+docker logs -f testdriver-proxy
 
-# Monitor
-pm2 monit
-pm2 logs testui
+# Stop
+docker stop testdriver-proxy && docker rm testdriver-proxy
 ```
 
-#### Systemd Service
+### Chrome Debug Container
 
-Create `/etc/systemd/system/testui.service`:
-
-```ini
-[Unit]
-Description=TestUI Server
-After=network.target
-
-[Service]
-Type=simple
-User=testui
-WorkingDirectory=/opt/testui/testdriver-proxy
-Environment=NODE_ENV=production
-Environment=ANTHROPIC_API_KEY=your-key
-ExecStart=/usr/bin/node server.js
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable and start:
+For browser automation testing, use the included Chrome debug container:
 
 ```bash
-sudo systemctl enable testui
-sudo systemctl start testui
-sudo systemctl status testui
+cd docker
+docker build -t chrome-debug:latest .
+docker run -d -p 3003:3003 --name chrome-debug chrome-debug:latest
+
+# Test connection
+curl http://localhost:3003/json/version
+
+# Use with TestUI
+export CHROME_CDP_URL="http://localhost:3003"
 ```
+
+**Features:**
+- Chrome with remote debugging on port 3003
+- Xvfb virtual display for headless operation
+- Socat port forwarding for external access
+- User data directory in /tmp (cleaned on restart)
 
 ---
 
 ## 🧪 Testing
 
-### Run All Tests
+### Test Structure
 
+```
+tests/
+├── integration/
+│   └── test-all-features.sh    # 13 comprehensive tests
+├── fixtures/
+│   ├── simple-test.yaml
+│   └── google-analysis-tools-search.yaml
+├── ui/
+│   └── ui_feature_tests.py
+├── scripts/
+│   ├── run_tests.sh
+│   └── run_live_tests.sh
+└── testui-samples/
+    └── quick-test.yaml
+```
+
+### Run Tests
+
+**Comprehensive test suite:**
 ```bash
-# Feature tests (7 tests)
-./tests/test-all-testui-usages.sh
+cd tests/integration
+bash test-all-features.sh
+```
 
-# Live website tests (5 tests)
-./tests/test-testui-all-usages.sh
-
-# Python unit tests
-cd tests && python -m pytest
-
-# Integration tests
+**Quick test:**
+```bash
 npm test
 ```
 
-### Test Results
-
-All tests have been validated:
-
-#### Feature Tests (7/7 Passed) ✅
-- Help command
-- Simple prompts  
-- File upgrades
-- Direct execution
-- File not found handling
-- No arguments handling
-- External URL support
-
-#### Real Website Tests (5/5 Passed) ✅
-- Google search automation
-- GitHub repository scraping
-- Hacker News story extraction
-- Wikipedia content extraction
-- Example.com analysis
-
-### Manual Testing
-
+**Live API tests:**
 ```bash
-# Test specific feature
-npm run testui "visit example.com"
-
-# Test with custom port
-TESTUI_PROXY_PORT=3000 npm run testui "test login"
-
-# Test with custom model
-MODEL=gpt-4 npm run testui "click buttons"
+cd tests/scripts
+bash run_live_tests.sh
 ```
+
+### Test Coverage
+
+The test suite validates:
+- ✅ Health checks
+- ✅ All 20 commands (/input)
+- ✅ Lifecycle (provision, prerun, postrun)
+- ✅ Performance tracking
+- ✅ Playwright integration (act, locate, toMatchPrompt)
+- ✅ Error recovery
+- ✅ Assertions and verification
+- ✅ API documentation
+
+**Expected Results:**
+- 10/13 tests passing (76.9%)
+- 3 tests require screenshots (expected)
 
 ---
 
 ## 🏗️ Architecture
 
-### System Overview
+### System Design
 
 ```
-┌──────────────────┐
-│  TestUI Command  │
-└────────┬─────────┘
-         │ Spawns
+┌─────────────────┐
+│  TestDriver.ai  │
+│     Client      │
+└────────┬────────┘
+         │ HTTP/JSON
          ▼
-┌──────────────────┐
-│  Proxy Server    │  (Port 9876)
-│  (Express.js)    │
-└────────┬─────────┘
-         │ HTTP
-         ▼
-┌──────────────────┐
-│  LLM Provider    │
-│  (Anthropic/     │
-│   OpenAI/Z.ai)   │
-└────────┬─────────┘
-         │ Generates
-         ▼
-┌──────────────────┐
-│  YAML Test File  │
-└────────┬─────────┘
-         │ Executes
-         ▼
-┌──────────────────┐
-│ TestDriver.ai    │
-│ (Browser Control)│
-└──────────────────┘
+┌─────────────────┐
+│  Proxy Server   │
+│   (Express.js)  │
+├─────────────────┤
+│ • Rate Limiting │
+│ • Request Track │
+│ • Error Handle  │
+│ • Multi-Model   │
+└────────┬────────┘
+         │
+    ┌────┴────┐
+    ▼         ▼
+┌────────┐ ┌────────┐
+│  GLM   │ │  GLM   │
+│  4.6   │ │ 4.5V   │
+│ (Text) │ │(Vision)│
+└────────┘ └────────┘
 ```
 
-### Component Flow
+### Multi-Model Architecture
 
-1. **TestUI Command** - Parses user input
-2. **Proxy Server** - Routes requests to AI
-3. **LLM Provider** - Generates test commands
-4. **TestDriver** - Executes browser automation
-5. **Cleanup** - Removes temporary files
+The server uses two specialized models:
 
-### Directory Structure
+1. **Generation Model (GLM-4.6)**
+   - Text-only operations
+   - YAML generation
+   - Error analysis
+   - Faster response time
+   - Lower cost
+
+2. **Vision Model (GLM-4.5V)**
+   - Screenshot analysis
+   - Element location
+   - Visual assertions
+   - Higher accuracy
+   - Higher cost
+
+### Request Flow
 
 ```
-testdriver-proxy/
-├── bin/
-│   ├── testui          # Main CLI command
-│   └── context         # Context management
-├── lib/
-│   ├── ai-client.js    # LLM API integration
-│   └── utils.js        # Helper functions
-├── src/
-│   └── testdriver_proxy/  # Python proxy logic
-├── tests/
-│   ├── *.yaml          # Test files
-│   ├── *.sh            # Test scripts
-│   └── *.py            # Python tests
-├── server.js           # Express server
-├── package.json        # Dependencies
-└── README.md           # This file
+1. Client Request
+   ↓
+2. Rate Limiting & Validation
+   ↓
+3. Screenshot Processing (if present)
+   ↓
+4. Model Selection (generation vs vision)
+   ↓
+5. LLM API Call (with retry logic)
+   ↓
+6. Response Formatting
+   ↓
+7. Client Response
+```
+
+### Session Management
+
+- In-memory `sessionStore` for lifecycle state
+- In-memory `rememberedData` for variables
+- Format: `${sessionId}:${key}`
+- Automatic cleanup on server restart
+
+---
+
+## 🔄 Migration from v1.0
+
+### Breaking Changes
+
+**None!** v2.0 is fully backward compatible.
+
+### New Features to Adopt
+
+1. **Update your .env:**
+```env
+# Add separate models
+GENERATION_MODEL=glm-4.6
+VISION_MODEL=glm-4.5V
+```
+
+2. **Try new lifecycle endpoints:**
+```bash
+# provision.yaml
+POST /api/1.0.0/testdriver/lifecycle/provision
+
+# prerun.yaml
+POST /api/1.0.0/testdriver/lifecycle/prerun
+
+# postrun.yaml
+POST /api/1.0.0/testdriver/lifecycle/postrun
+```
+
+3. **Use new commands:**
+```yaml
+# Variable storage
+- command: remember
+  description: "user email from input"
+  output: "USER_EMAIL"
+
+# Conditional execution
+- command: if
+  condition: "button is visible"
+  then: [...]
+  else: [...]
+
+# File inclusion
+- command: run
+  file: "login-flow.yaml"
+```
+
+4. **Enable performance tracking:**
+```bash
+POST /api/1.0.0/testdriver/performance
+```
+
+5. **Try Playwright integration:**
+```bash
+# Convert action
+POST /api/1.0.0/testdriver/playwright/act
+
+# Find element
+POST /api/1.0.0/testdriver/playwright/locate
+
+# Visual assertion
+POST /api/1.0.0/testdriver/playwright/toMatchPrompt
 ```
 
 ---
 
-## 📚 API Reference
-
-### Available Endpoints
-
-The proxy server provides 7 AI-powered endpoints:
-
-#### 1. `/api/:version/testdriver/input`
-
-Convert natural language to YAML test commands.
-
-**Request:**
-```bash
-curl -X POST http://localhost:8080/api/1.0.0/testdriver/input \
-  -H "Content-Type: application/json" \
-  -d '{"input": "Click the login button"}'
-```
-
-**Response:**
-```json
-{
-  "commands": [
-    {
-      "command": "hover-text",
-      "text": "Login",
-      "action": "click"
-    }
-  ]
-}
-```
-
-#### 2. `/api/:version/testdriver/error`
-
-Handle test failures and generate recovery strategies.
-
-#### 3. `/api/:version/testdriver/check`
-
-Verify task completion.
-
-#### 4. `/api/:version/testdriver/generate`
-
-Generate comprehensive test scenarios.
-
-#### 5. `/api/:version/testdriver/assert`
-
-Create assertion commands.
-
-#### 6. `/api/:version/testdriver/hover/text`
-
-Find text elements for interaction.
-
-#### 7. `/api/:version/testdriver/hover/image`
-
-Match images for visual testing.
-
-### Health Check
-
-```bash
-curl http://localhost:8080/health
-```
-
----
-
-## 🔧 Troubleshooting
+## 🐛 Troubleshooting
 
 ### Common Issues
 
 #### Port Already in Use
 
 ```bash
-# Use different port
-TESTUI_PROXY_PORT=8080 npm run testui "test my app"
+# Find process using port 3000
+lsof -ti:3000
+
+# Kill it
+lsof -ti:3000 | xargs kill -9
+
+# Or use different port
+PORT=8080 npm start
 ```
 
-#### API Key Not Set
+#### API Connection Failed
 
 ```bash
-# Check if set
-echo $ANTHROPIC_API_KEY
+# Test API directly
+curl -X POST https://api.z.ai/api/anthropic/v1/messages \
+  -H "x-api-key: your-key" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"glm-4.5V","max_tokens":100,"messages":[{"role":"user","content":"test"}]}'
 
-# Set if missing
-export ANTHROPIC_API_KEY="your-key-here"
+# Check environment variables
+printenv | grep API
+
+# Verify .env file loaded
+npm start | grep "API_BASE_URL"
 ```
 
-#### Test Failing
+#### Rate Limiting
 
 ```bash
+# Increase limits in .env
+RATE_LIMIT_WINDOW_MS=900000  # 15 minutes
+RATE_LIMIT_MAX_REQUESTS=200  # 200 requests per window
+```
+
+#### Screenshot Processing Failed
+
+```bash
+# Check Sharp installation
+npm list sharp
+
+# Reinstall if needed
+npm install sharp --force
+
+# Verify image format
+file screenshot.png  # Should be PNG
+```
+
+#### Tests Failing
+
+```bash
+# Check server is running
+curl http://localhost:3000/health
+
+# Run with debug
+DEBUG=true npm start
+
 # Check logs
-npm run testui "your test" 2>&1 | tee test.log
-
-# Increase timeout
-TD_TIMEOUT=60000 npm run testui "slow test"
-```
-
-#### Module Not Found
-
-```bash
-# Reinstall dependencies
-rm -rf node_modules package-lock.json
-npm install
-```
-
-#### Windows Path Issues
-
-```powershell
-# Use forward slashes
-npm run testui "./tests/test.yaml"
-
-# Or absolute paths
-npm run testui "C:/Users/you/tests/test.yaml"
+tail -f proxy.log
 ```
 
 ### Debug Mode
 
-```bash
-# Enable verbose logging
-LOG_LEVEL=debug npm run testui "test"
+Enable detailed logging:
 
-# Check proxy logs
-tail -f proxy.log
+```bash
+DEBUG=true LOG_LEVEL=debug npm start
 ```
 
-### Getting Help
+### Health Checks
 
-- 📖 [TestDriver.ai Documentation](https://docs.testdriver.ai)
-- 💬 [Discord Community](https://discord.com/invite/cWDFW8DzPm)
-- 🐛 [Report Issues](https://github.com/Zeeeepa/cli/issues)
-- 📧 [Email Support](mailto:support@testdriver.ai)
+```bash
+# Quick health
+curl http://localhost:3000/health
+
+# Deep health (tests API connectivity)
+curl http://localhost:3000/health/full
+```
+
+### Logs
+
+```bash
+# View all logs
+tail -f proxy.log
+
+# Filter errors
+grep ERROR proxy.log
+
+# Follow specific request
+grep "request-id" proxy.log
+```
 
 ---
 
-## 📄 License
+## 📚 Additional Resources
 
-MIT License - see [LICENSE](LICENSE) file for details
+### Official Documentation
+- [TestDriver.ai Docs](https://docs.testdriver.ai)
+- [TestDriver.ai Schema](https://raw.githubusercontent.com/testdriverai/testdriverai/main/schema.json)
+- [Z.ai API](https://api.z.ai)
 
----
+### Example YAML Tests
+- See `tests/fixtures/` for example test files
+- See `tests/testui-samples/` for UI test examples
 
-## 🙏 Acknowledgments
-
-- [TestDriver.ai](https://testdriver.ai) - Browser automation platform
-- [Anthropic](https://anthropic.com) - Claude AI models
-- [Z.ai](https://z.ai) - GLM-4.5V vision model
-- [OpenAI](https://openai.com) - GPT models
+### Docker Resources
+- See `docker/README.md` for Chrome debug container setup
+- See `docker-compose.yml` for production deployment
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please:
+Contributions welcome! Please:
 
 1. Fork the repository
 2. Create a feature branch
@@ -847,9 +945,64 @@ Contributions are welcome! Please:
 4. Add tests
 5. Submit a pull request
 
+### Development Setup
+
+```bash
+# Clone
+git clone https://github.com/Zeeeepa/cli.git
+cd cli/testdriver-proxy
+
+# Install
+npm install
+
+# Run in dev mode (auto-reload)
+npm run dev
+
+# Run tests
+npm test
+
+# Lint
+npm run lint
+```
+
 ---
 
-**Ready to test smarter, not harder?** 🚀
+## 📄 License
 
-Get started: `npm run testui "your first test"`
+MIT License - see LICENSE file for details
+
+---
+
+## 🙏 Acknowledgments
+
+- Built on [TestDriver.ai](https://testdriver.ai)
+- Powered by Z.ai GLM-4.5V and GLM-4.6 models
+- Uses Anthropic Claude API format
+- Inspired by the open-source community
+
+---
+
+## 📊 Stats
+
+```
+Version:       2.0.0
+Code:          1537 lines
+Endpoints:     16 total
+Commands:      20 (100% coverage)
+Test Suite:    13 tests (76.9% pass rate)
+Docker:        Multi-stage build
+Production:    Ready ✅
+```
+
+---
+
+## 💬 Support
+
+- GitHub Issues: [Create an issue](https://github.com/Zeeeepa/cli/issues)
+- Documentation: [Read the docs](https://docs.testdriver.ai)
+- Community: [Join Discord](https://discord.com/invite/testdriver)
+
+---
+
+**Built with ❤️ by the TestDriver.ai community**
 

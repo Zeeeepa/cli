@@ -53,3 +53,15 @@ Thumbs.db
 # Ruff/Black
 .ruff_cache/
 
+
+# Logs
+*.log
+proxy.log
+server-output.log
+
+# Temporary files
+tmp/
+temp/
+
+# Test outputs
+tests/**/output/
