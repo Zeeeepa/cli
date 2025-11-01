@@ -278,41 +278,83 @@ app.post('/api/:version/testdriver/input', upload.single('image'), async (req, r
     
     logger.debug('Input data:', { input, mousePosition, activeWindow, hasScreenshot: !!screenshot });
 
-    // Build system prompt for TestDriver command generation
+    // Build system prompt for TestDriver command generation with ALL commands
     const systemPrompt = `You are an expert test automation assistant for TestDriver.ai, a vision-based testing framework.
 
 Your task is to convert natural language test instructions into executable YAML commands.
 
-Available Commands:
-- hover-text: Find and interact with text on screen
-  Syntax: { command: hover-text, text: "button text", action: click|hover|double-click }
+Available Commands (Complete Set):
 
-- hover-image: Find UI elements by matching images
-  Syntax: { command: hover-image, image: "template.png", action: click }
-
+CORE INTERACTION:
 - type: Keyboard input
   Syntax: { command: type, text: "content to type", delay: 50 }
 
-- press: Press keyboard keys
-  Syntax: { command: press, key: "Enter", modifiers: ["Control"] }
+- press-keys: Press keyboard keys (supports modifiers)
+  Syntax: { command: press-keys, keys: ["ctrl", "c"] }
 
 - click: Mouse click at coordinates
-  Syntax: { command: click, x: 100, y: 200, button: left|right }
+  Syntax: { command: click, x: 100, y: 200, action: click|right-click|double-click|hover }
 
-- scroll: Scroll the page
-  Syntax: { command: scroll, direction: up|down|left|right, amount: 100 }
+- hover: Move mouse to coordinates
+  Syntax: { command: hover, x: 100, y: 200 }
 
-- wait: Delay execution
-  Syntax: { command: wait, duration: 1000 }
+- drag: Drag to coordinates
+  Syntax: { command: drag, x: 100, y: 200 }
 
-- assert: Verify state/condition
-  Syntax: { command: assert, expect: "description of expected state" }
+VISION-BASED INTERACTION:
+- hover-text: Find and interact with text on screen
+  Syntax: { command: hover-text, text: "button text", description: "submit button", action: click, method: ai|turbo, timeout: 30000 }
 
-- exec-js: Execute JavaScript
-  Syntax: { command: exec-js, script: "document.title" }
+- hover-image: Find UI elements by description
+  Syntax: { command: hover-image, description: "red submit button", action: click }
 
-- match-image: Verify screenshot matches template
-  Syntax: { command: match-image, image: "expected.png", threshold: 0.9 }
+- match-image: Click matching image template
+  Syntax: { command: match-image, path: "template.png", action: click, invert: false }
+
+- wait-for-text: Wait until text appears
+  Syntax: { command: wait-for-text, text: "Loading complete", method: ai|turbo, timeout: 30000, invert: false }
+
+- wait-for-image: Wait until image description matches
+  Syntax: { command: wait-for-image, description: "success icon", timeout: 30000, invert: false }
+
+SCROLLING:
+- scroll: Scroll in direction
+  Syntax: { command: scroll, direction: up|down|left|right, amount: 100, method: keyboard|mouse }
+
+- scroll-until-text: Scroll until text found
+  Syntax: { command: scroll-until-text, text: "Load More", direction: down, distance: 1000, method: keyboard }
+
+- scroll-until-image: Scroll until image found
+  Syntax: { command: scroll-until-image, description: "footer logo", direction: down, distance: 1000 }
+
+TESTING & VALIDATION:
+- assert: Verify expected state (vision-based)
+  Syntax: { command: assert, expect: "login form is visible", async: false, invert: false }
+
+- remember: Store data for later use
+  Syntax: { command: remember, description: "user email from input field", output: "USER_EMAIL" }
+
+- wait: Simple delay
+  Syntax: { command: wait, timeout: 2000 }
+
+ADVANCED:
+- exec: Execute code (JavaScript or PowerShell)
+  Syntax: { command: exec, lang: js|pwsh, code: "console.log('test')", timeout: 30000, silent: false, output: "RESULT_VAR" }
+
+- focus-application: Switch to application by name
+  Syntax: { command: focus-application, name: "Google Chrome" }
+
+- if: Conditional execution
+  Syntax: { command: if, condition: "button is visible", then: [{...}], else: [{...}] }
+
+- run: Execute another YAML file
+  Syntax: { command: run, file: "login-flow.yaml" }
+
+IMPORTANT NOTES:
+- method: ai (slower, more accurate) vs turbo (faster, OCR-based)
+- invert: Set to true for negative assertions (e.g., "button NOT visible")
+- async: Run assertion in parallel without blocking
+- timeout: Milliseconds to wait (default varies by command)
 
 Current Context:
 - Mouse Position: ${mousePosition ? JSON.stringify(mousePosition) : 'Unknown'}
@@ -324,11 +366,15 @@ Return ONLY a markdown code block containing YAML commands:
 \`\`\`yaml
 - command: hover-text
   text: "Sign In"
+  description: "login button"
   action: click
+  method: ai
 - command: type
   text: "user@example.com"
+- command: press-keys
+  keys: ["enter"]
 - command: assert
-  expect: "login successful"
+  expect: "dashboard is visible"
 \`\`\`
 
 Be concise. Focus on the exact task requested.`;
@@ -922,24 +968,469 @@ app.get('/health/full', async (req, res) => {
   res.json(healthStatus);
 });
 
+// ============================================================================
+// Lifecycle Endpoints - provision, prerun, postrun
+// ============================================================================
+
+// In-memory storage for session data
+const sessionStore = new Map();
+const rememberedData = new Map();
+
+// POST /api/:version/testdriver/lifecycle/provision
+// Execute provision.yaml - runs once when sandbox created
+app.post('/api/:version/testdriver/lifecycle/provision', upload.single('yaml'), async (req, res) => {
+  logger.info('Received /lifecycle/provision request');
+  
+  try {
+    const { sessionId, yamlContent } = req.body;
+    const yaml = req.file?.buffer ? req.file.buffer.toString('utf-8') : yamlContent;
+    
+    logger.debug('Provision data:', { sessionId, hasYaml: !!yaml });
+
+    const systemPrompt = `You are executing a TestDriver.ai provision script. Provision scripts run once when a sandbox is created to set up the environment.
+
+Common provision tasks:
+- Install software dependencies
+- Setup browser extensions  
+- Configure system settings
+- Download test data or assets
+
+Analyze the provided YAML and generate a summary of what will be executed, including:
+1. Software/tools being installed
+2. Configuration changes
+3. Expected duration
+4. Any potential issues or dependencies`;
+
+    const userContent = [
+      { type: 'text', text: `Execute this provision script:\n\n${yaml}\n\nProvide execution summary and any warnings.` }
+    ];
+
+    const messages = [{ role: 'user', content: userContent }];
+    const response = await callLLM(messages, systemPrompt, false);
+    const result = extractTextContent(response);
+
+    // Store provision status
+    sessionStore.set(`${sessionId}:provision`, {
+      status: 'completed',
+      timestamp: new Date().toISOString(),
+      summary: result
+    });
+
+    res.json({
+      markdown: result,
+      raw: response,
+      sessionId,
+      status: 'completed'
+    });
+    
+  } catch (error) {
+    logger.error('Error in /lifecycle/provision:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/:version/testdriver/lifecycle/prerun
+// Execute prerun.yaml - runs before each test
+app.post('/api/:version/testdriver/lifecycle/prerun', upload.single('yaml'), async (req, res) => {
+  logger.info('Received /lifecycle/prerun request');
+  
+  try {
+    const { sessionId, yamlContent } = req.body;
+    const yaml = req.file?.buffer ? req.file.buffer.toString('utf-8') : yamlContent;
+    
+    logger.debug('Prerun data:', { sessionId, hasYaml: !!yaml });
+
+    const systemPrompt = `You are executing a TestDriver.ai prerun script. Prerun scripts run before each test to prepare the immediate test environment.
+
+Common prerun tasks:
+- Open applications or browsers
+- Navigate to starting pages
+- Clear application state
+- Start monitoring tools (dashcam)
+- Set environment variables
+
+Analyze the provided YAML and generate an execution plan including:
+1. Applications to launch
+2. URLs to navigate to
+3. Monitoring tools to start
+4. Expected ready state`;
+
+    const userContent = [
+      { type: 'text', text: `Execute this prerun script:\n\n${yaml}\n\nProvide execution plan and readiness checks.` }
+    ];
+
+    const messages = [{ role: 'user', content: userContent }];
+    const response = await callLLM(messages, systemPrompt, false);
+    const result = extractTextContent(response);
+
+    // Store prerun status
+    sessionStore.set(`${sessionId}:prerun`, {
+      status: 'completed',
+      timestamp: new Date().toISOString(),
+      summary: result
+    });
+
+    res.json({
+      markdown: result,
+      raw: response,
+      sessionId,
+      status: 'ready'
+    });
+    
+  } catch (error) {
+    logger.error('Error in /lifecycle/prerun:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/:version/testdriver/lifecycle/postrun
+// Execute postrun.yaml - runs after tests complete
+app.post('/api/:version/testdriver/lifecycle/postrun', upload.single('yaml'), async (req, res) => {
+  logger.info('Received /lifecycle/postrun request');
+  
+  try {
+    const { sessionId, yamlContent, testResults } = req.body;
+    const yaml = req.file?.buffer ? req.file.buffer.toString('utf-8') : yamlContent;
+    
+    logger.debug('Postrun data:', { sessionId, hasYaml: !!yaml, hasResults: !!testResults });
+
+    const systemPrompt = `You are executing a TestDriver.ai postrun script. Postrun scripts run after tests complete for cleanup and reporting.
+
+Common postrun tasks:
+- Generate test reports
+- Capture screenshots or logs
+- Clean up temporary files
+- Stop background processes
+- Upload artifacts
+
+Analyze the provided YAML and test results to generate:
+1. Cleanup actions performed
+2. Reports generated
+3. Artifacts saved
+4. Final status summary`;
+
+    const userContent = [
+      { type: 'text', text: `Execute this postrun script:\n\n${yaml}\n\nTest Results:\n${JSON.stringify(testResults, null, 2)}\n\nProvide cleanup summary and artifact list.` }
+    ];
+
+    const messages = [{ role: 'user', content: userContent }];
+    const response = await callLLM(messages, systemPrompt, false);
+    const result = extractTextContent(response);
+
+    // Store postrun status
+    sessionStore.set(`${sessionId}:postrun`, {
+      status: 'completed',
+      timestamp: new Date().toISOString(),
+      summary: result
+    });
+
+    res.json({
+      markdown: result,
+      raw: response,
+      sessionId,
+      status: 'completed',
+      artifacts: [] // Would be populated with actual artifact URLs
+    });
+    
+  } catch (error) {
+    logger.error('Error in /lifecycle/postrun:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================================
+// Performance Tracking Endpoint
+// ============================================================================
+
+// POST /api/:version/testdriver/performance
+// Analyze performance metrics from test execution
+app.post('/api/:version/testdriver/performance', upload.array('screenshots'), async (req, res) => {
+  logger.info('Received /performance request');
+  
+  try {
+    const { operations, timings, networkActivity } = req.body;
+    const screenshots = req.files || [];
+    
+    logger.debug('Performance data:', {
+      operationCount: operations?.length,
+      timingCount: timings?.length,
+      screenshotCount: screenshots.length,
+      hasNetworkData: !!networkActivity
+    });
+
+    const systemPrompt = `You are analyzing TestDriver.ai test performance metrics.
+
+Analyze the provided data to identify:
+1. Slow operations (> 2 seconds)
+2. Network bottlenecks
+3. Visual rendering delays (redraw detection)
+4. Optimization opportunities
+5. Performance anomalies
+
+Provide actionable recommendations for improving test speed and reliability.`;
+
+    // Build performance summary
+    const performanceSummary = `
+Operations: ${operations?.length || 0} commands executed
+Total Duration: ${timings?.totalDuration || 'N/A'}ms
+Network Requests: ${networkActivity?.requests || 0}
+Screenshots Captured: ${screenshots.length}
+
+Detailed Timings:
+${JSON.stringify(timings, null, 2)}
+
+Network Activity:
+${JSON.stringify(networkActivity, null, 2)}`;
+
+    const userContent = [
+      { type: 'text', text: performanceSummary }
+    ];
+
+    // Add screenshots for redraw analysis
+    for (const screenshot of screenshots.slice(0, 5)) { // Limit to 5 screenshots
+      const processedImage = await processScreenshot(screenshot.buffer.toString('base64'));
+      userContent.push({
+        type: 'image_url',
+        image_url: { url: `data:image/png;base64,${processedImage}` }
+      });
+    }
+
+    const messages = [{ role: 'user', content: userContent }];
+    const response = await callLLM(messages, systemPrompt, false);
+    const analysis = extractTextContent(response);
+
+    res.json({
+      markdown: analysis,
+      raw: response,
+      metrics: {
+        totalOperations: operations?.length || 0,
+        totalDuration: timings?.totalDuration || 0,
+        averageOperationTime: timings?.totalDuration ? 
+          (timings.totalDuration / operations.length).toFixed(2) : 0,
+        networkRequests: networkActivity?.requests || 0,
+        screenshotsAnalyzed: screenshots.length
+      }
+    });
+    
+  } catch (error) {
+    logger.error('Error in /performance:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================================
+// Playwright Integration Endpoints
+// ============================================================================
+
+// POST /api/:version/testdriver/playwright/act
+// Perform action using natural language (for Playwright integration)
+app.post('/api/:version/testdriver/playwright/act', upload.single('image'), async (req, res) => {
+  logger.info('Received /playwright/act request');
+  
+  try {
+    const { action, pageUrl } = req.body;
+    const screenshot = req.file?.buffer ? req.file.buffer.toString('base64') : req.body.image;
+    
+    logger.debug('Playwright Act data:', { action, pageUrl, hasScreenshot: !!screenshot });
+
+    const systemPrompt = `You are TestDriver.ai's Act function for Playwright. Convert a natural language action into executable YAML commands.
+
+The action will be executed immediately in a Playwright browser context.
+
+Return ONLY the YAML commands needed to perform the action, no explanations.`;
+
+    const userContent = [
+      { type: 'text', text: `Action: ${action}\nPage URL: ${pageUrl || 'Unknown'}\n\nGenerate YAML commands to perform this action.` }
+    ];
+
+    if (screenshot) {
+      const processedImage = await processScreenshot(screenshot);
+      userContent.push({
+        type: 'image_url',
+        image_url: { url: `data:image/png;base64,${processedImage}` }
+      });
+    }
+
+    const messages = [{ role: 'user', content: userContent }];
+    const response = await callLLM(messages, systemPrompt, false);
+    const yaml = extractTextContent(response);
+
+    res.json({
+      markdown: yaml,
+      raw: response,
+      action,
+      executable: true
+    });
+    
+  } catch (error) {
+    logger.error('Error in /playwright/act:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/:version/testdriver/playwright/locate
+// Find element coordinates using natural language description
+app.post('/api/:version/testdriver/playwright/locate', upload.single('image'), async (req, res) => {
+  logger.info('Received /playwright/locate request');
+  
+  try {
+    const { description, pageUrl } = req.body;
+    const screenshot = req.file?.buffer ? req.file.buffer.toString('base64') : req.body.image;
+    
+    if (!screenshot) {
+      return res.status(400).json({ error: 'Screenshot is required for locate' });
+    }
+    
+    logger.debug('Playwright Locate data:', { description, pageUrl });
+
+    const systemPrompt = `You are TestDriver.ai's Locate function for Playwright. Find the exact coordinates of an element based on a natural language description.
+
+Analyze the screenshot and return the element's bounding box:
+- x: X coordinate of element center
+- y: Y coordinate of element center
+- width: Element width in pixels
+- height: Element height in pixels
+- confidence: Your confidence level (0.0 to 1.0)
+
+Return ONLY a JSON object with these fields, no other text.`;
+
+    const processedImage = await processScreenshot(screenshot);
+    const userContent = [
+      { type: 'text', text: `Find element: "${description}"\nPage URL: ${pageUrl || 'Unknown'}\n\nReturn JSON with x, y, width, height, confidence.` },
+      {
+        type: 'image_url',
+        image_url: { url: `data:image/png;base64,${processedImage}` }
+      }
+    ];
+
+    const messages = [{ role: 'user', content: userContent }];
+    const response = await callLLM(messages, systemPrompt, false);
+    const result = extractTextContent(response);
+
+    // Try to parse as JSON
+    let coordinates = {};
+    try {
+      coordinates = JSON.parse(result.match(/\{[^}]+\}/)?.[0] || '{}');
+    } catch (e) {
+      coordinates = {
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+        confidence: 0,
+        error: 'Failed to parse coordinates'
+      };
+    }
+
+    res.json({
+      coordinates,
+      description,
+      raw: response
+    });
+    
+  } catch (error) {
+    logger.error('Error in /playwright/locate:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/:version/testdriver/playwright/toMatchPrompt
+// Visual assertion using natural language (expect().toMatchPrompt())
+app.post('/api/:version/testdriver/playwright/toMatchPrompt', upload.single('image'), async (req, res) => {
+  logger.info('Received /playwright/toMatchPrompt request');
+  
+  try {
+    const { prompt, pageUrl } = req.body;
+    const screenshot = req.file?.buffer ? req.file.buffer.toString('base64') : req.body.image;
+    
+    if (!screenshot) {
+      return res.status(400).json({ error: 'Screenshot is required for toMatchPrompt' });
+    }
+    
+    logger.debug('Playwright toMatchPrompt data:', { prompt, pageUrl });
+
+    const systemPrompt = `You are TestDriver.ai's toMatchPrompt function for Playwright assertions. Verify if a screenshot matches a natural language description.
+
+Return a JSON object with:
+- matched: boolean (true if matches, false if not)
+- confidence: number (0.0 to 1.0)
+- reason: string (brief explanation)
+
+Return ONLY the JSON object, no other text.`;
+
+    const processedImage = await processScreenshot(screenshot);
+    const userContent = [
+      { type: 'text', text: `Assert: "${prompt}"\nPage URL: ${pageUrl || 'Unknown'}\n\nDoes the screenshot match this description? Return JSON.` },
+      {
+        type: 'image_url',
+        image_url: { url: `data:image/png;base64,${processedImage}` }
+      }
+    ];
+
+    const messages = [{ role: 'user', content: userContent }];
+    const response = await callLLM(messages, systemPrompt, false);
+    const result = extractTextContent(response);
+
+    // Try to parse as JSON
+    let assertionResult = {};
+    try {
+      assertionResult = JSON.parse(result.match(/\{[^}]+\}/)?.[0] || '{}');
+    } catch (e) {
+      assertionResult = {
+        matched: false,
+        confidence: 0,
+        reason: 'Failed to parse assertion result',
+        error: result
+      };
+    }
+
+    res.json({
+      ...assertionResult,
+      prompt,
+      raw: response
+    });
+    
+  } catch (error) {
+    logger.error('Error in /playwright/toMatchPrompt:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/', (req, res) => {
   res.json({
     name: 'TestDriver.ai Proxy Server',
-    version: '1.0.0',
-    description: 'Proxy server to use TestDriver.ai with custom LLM APIs',
+    version: '2.0.0',
+    description: 'Full-featured proxy server for TestDriver.ai with all commands and integrations',
     endpoints: [
-      'POST /api/:version/testdriver/input - Convert natural language to YAML commands',
+      'POST /api/:version/testdriver/input - Convert natural language to YAML commands (ALL 20 COMMANDS)',
       'POST /api/:version/testdriver/error - AI-powered error recovery',
       'POST /api/:version/testdriver/check - Verify task completion',
       'POST /api/:version/testdriver/generate - Generate test scenarios',
       'POST /api/:version/testdriver/assert - Natural language assertions',
       'POST /api/:version/testdriver/hover/text - Find text coordinates',
       'POST /api/:version/testdriver/hover/image - Find image coordinates',
-      'GET /health - Health check'
+      'POST /api/:version/testdriver/lifecycle/provision - Execute provision.yaml',
+      'POST /api/:version/testdriver/lifecycle/prerun - Execute prerun.yaml',
+      'POST /api/:version/testdriver/lifecycle/postrun - Execute postrun.yaml',
+      'POST /api/:version/testdriver/performance - Analyze performance metrics',
+      'POST /api/:version/testdriver/playwright/act - Playwright Act integration',
+      'POST /api/:version/testdriver/playwright/locate - Playwright Locate integration',
+      'POST /api/:version/testdriver/playwright/toMatchPrompt - Playwright assertion',
+      'GET /health - Quick health check',
+      'GET /health/full - Deep health check with API test'
     ],
+    features: {
+      commands: 20,
+      lifecycle: true,
+      performance: true,
+      playwright: true,
+      websocket: true,
+      vision: true
+    },
     config: {
       provider: config.apiProvider,
-      model: config.model,
+      generationModel: config.generationModel,
+      visionModel: config.visionModel,
       apiBaseUrl: config.apiBaseUrl
     }
   });
