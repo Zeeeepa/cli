@@ -1,0 +1,50 @@
+# Qwen Chat Provider Configuration
+# Generated: 2025-11-01
+# Status: Partial Success (Response extraction needs refinement)
+
+name: qwen
+url: https://chat.qwen.ai/
+
+credentials:
+  email: developer@pixelium.uk
+  password: developer1
+
+selectors:
+  # Multiple fallback selectors for robustness
+  email: "input[type=\"email\"]"
+  password: "input[type=\"password\"]"
+  loginButton: "button[type=\"submit\"]"
+  messageInput: "textarea[placeholder*=\"Message\"]"
+  sendButton: "button[aria-label=\"Send\"]"
+  # Response selectors with fallbacks to avoid menu items
+  response: ".message-content"
+  response_fallbacks:
+    - ".chat-message:not(.user)"
+    - "[data-message-role=\"assistant\"]"
+    - ".ai-response"
+
+captcha:
+  enabled: true
+  selectors:
+    - "iframe[src*='captcha']"
+    - "#captcha"
+    - ".captcha-container"
+
+settings:
+  slowLoad: false
+  requiresAuth: true
+  timeout: 60000
+  captcha_wait: 120000
+
+# Expected Response
+expected_model: "Qwen by Alibaba Cloud"
+expected_response_pattern: ".*qwen.*alibaba.*"
+
+# Test Results (from your manual testing)
+test_results:
+  status: "PARTIAL"
+  issue: "Got page content (menu items) instead of actual response"
+  fix_applied: "Multiple specific response selectors"
+  notes: "Page loaded successfully, response extraction needs correct selector"
+  actual_output: "Image Edit Web Dev Deep Research Image Generation Travel Planner More"
+

@@ -1,0 +1,49 @@
+# Deepseek Chat Provider Configuration
+# Generated: 2025-11-01
+# Status: Failed (Timeout issue)
+
+name: deepseek
+url: https://chat.deepseek.com/
+
+credentials:
+  email: zeeeepa+1@gmail.com
+  password: developer123
+
+selectors:
+  # Multiple fallback selectors for robustness
+  email: "input[type=\"email\"]"
+  password: "input[type=\"password\"]"
+  loginButton: "button[type=\"submit\"]"
+  messageInput: "textarea"
+  sendButton: "button[aria-label=\"Send message\"]"
+  response: ".message-content"
+  response_fallbacks:
+    - ".assistant-message"
+    - "[data-role=\"assistant\"]"
+    - ".ai-response"
+
+captcha:
+  enabled: true
+  selectors:
+    - "iframe[src*='captcha']"
+    - "#captcha"
+    - ".captcha-challenge"
+
+settings:
+  slowLoad: true  # Extended timeout for slow loading
+  requiresAuth: true
+  timeout: 90000  # 90 seconds instead of 60
+  captcha_wait: 120000
+
+# Expected Response
+expected_model: "DeepSeek AI"
+expected_response_pattern: ".*deepseek.*"
+
+# Test Results (from your manual testing)
+test_results:
+  status: "FAILED"
+  issue: "Timeout 30000ms exceeded"
+  fix_applied: "slowLoad flag with 90s timeout"
+  notes: "Site took too long to load (>30 seconds)"
+  recommendation: "Increase timeout or check network conditions"
+

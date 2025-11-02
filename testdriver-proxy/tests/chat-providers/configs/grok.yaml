@@ -1,0 +1,42 @@
+# Grok Chat Provider Configuration
+# Generated: 2025-11-01
+# Status: Working (No Captcha)
+
+name: grok
+url: https://grok.com/
+
+credentials:
+  email: developer@pixelium.uk
+  password: developer123
+
+selectors:
+  # Verified working selectors
+  email: "input[type=\"email\"]"
+  password: "input[type=\"password\"]"
+  loginButton: "button[type=\"submit\"]"
+  messageInput: "textarea"
+  sendButton: "button:has-text(\"Send\")"
+  response: ".message.assistant"
+
+captcha:
+  enabled: false
+  selectors:
+    - "iframe[src*='captcha']"
+    - "#captcha"
+    - ".captcha-box"
+
+settings:
+  slowLoad: false
+  requiresAuth: true
+  timeout: 60000
+
+# Expected Response
+expected_model: "Grok 4 by xAI"
+expected_response_pattern: "I am Grok 4, built by xAI"
+
+# Test Results (from manual testing)
+test_results:
+  status: "PASS"
+  duration: "10.2s"
+  notes: "Works perfectly - clean, simple response"
+

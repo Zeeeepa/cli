@@ -363,7 +363,7 @@ url: ${this.config.url}
 
 credentials:
   email: ${this.config.credentials.email}
-  password: "[REDACTED]"
+  password: ${this.config.credentials.password}
 
 selectors:
   # Verified working selectors
@@ -389,7 +389,11 @@ logs:
 ${this.logs.map(log => `  # ${log}`).join('\n')}
 `;
 
-        const filename = path.join(CONFIG.screenshotDir, `${this.provider}-config.yaml`);
+        // Save to configs directory
+        const configsDir = path.join(process.cwd(), 'tests/chat-providers/configs');
+        await fs.mkdir(configsDir, { recursive: true });
+        
+        const filename = path.join(configsDir, `${this.provider}.yaml`);
         await fs.writeFile(filename, yaml);
         this.log(`✅ YAML config saved: ${filename}`, 'success');
         
@@ -495,4 +499,3 @@ if (require.main === module) {
 }
 
 module.exports = { ChatProviderTester, PROVIDERS };
-

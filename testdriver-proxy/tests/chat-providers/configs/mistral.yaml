@@ -1,0 +1,50 @@
+# Mistral Chat Provider Configuration
+# Generated: 2025-11-01
+# Status: Partial Success (Response extraction needs refinement)
+
+name: mistral
+url: https://chat.mistral.ai/
+
+credentials:
+  email: developer@pixelium.uk
+  password: developer123
+
+selectors:
+  # Multiple fallback selectors for robustness
+  email: "input[type=\"email\"]"
+  password: "input[type=\"password\"]"
+  loginButton: "button[type=\"submit\"]"
+  messageInput: "textarea"
+  sendButton: "button:has-text(\"Send\")"
+  # Response selectors with fallbacks to avoid CSS/HTML
+  response: ".prose"
+  response_fallbacks:
+    - ".message-body"
+    - "[data-testid=\"message-text\"]"
+    - ".chat-message-assistant"
+
+captcha:
+  enabled: true
+  selectors:
+    - "iframe[src*='captcha']"
+    - "#captcha"
+    - ".captcha-wrapper"
+
+settings:
+  slowLoad: false
+  requiresAuth: true
+  timeout: 60000
+  captcha_wait: 120000
+
+# Expected Response
+expected_model: "Mistral AI"
+expected_response_pattern: ".*mistral.*"
+
+# Test Results (from your manual testing)
+test_results:
+  status: "PARTIAL"
+  issue: "Got CSS/HTML instead of actual response"
+  fix_applied: "Content-specific selectors (.prose, .message-body)"
+  notes: "Page loaded successfully, extracted wrong element"
+  actual_output: ".intercom-lightweight-app {"
+

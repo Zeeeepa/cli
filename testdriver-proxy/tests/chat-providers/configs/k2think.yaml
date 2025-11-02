@@ -1,0 +1,44 @@
+# K2Think Chat Provider Configuration
+# Generated: 2025-11-01
+# Status: Working (No Captcha)
+
+name: k2think
+url: https://www.k2think.ai/
+
+credentials:
+  email: developer@pixelium.uk
+  password: developer123
+
+selectors:
+  # Verified working selectors
+  email: "input[type=\"email\"]"
+  password: "input[type=\"password\"]"
+  loginButton: "button[type=\"submit\"]"
+  messageInput: "textarea"
+  sendButton: "button:has-text(\"Send\")"
+  response: ".message.assistant"
+
+captcha:
+  enabled: false
+  selectors:
+    - "iframe[src*='captcha']"
+    - "#captcha"
+    - ".captcha-box"
+    - "[class*='recaptcha']"
+
+settings:
+  slowLoad: false
+  requiresAuth: true
+  timeout: 60000
+
+# Expected Response
+expected_model: "K2-Think by MBZUAI IFM"
+expected_response_pattern: "I am K2-Think, an AI assistant developed by.*MBZUAI"
+
+# Test Results (from manual testing)
+test_results:
+  status: "PASS"
+  duration: "12.5s"
+  response_speed: "1651.7 T/s"
+  notes: "Works perfectly without captcha"
+

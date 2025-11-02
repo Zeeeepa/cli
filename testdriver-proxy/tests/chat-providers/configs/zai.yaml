@@ -1,0 +1,54 @@
+# Z.ai Chat Provider Configuration
+# Generated: 2025-11-01
+# Status: Failed (Authentication issue)
+
+name: zai
+url: https://z.ai/
+
+credentials:
+  email: developer@pixelium.uk
+  password: developer123
+
+selectors:
+  # Multiple fallback selectors for authentication
+  email: "input[type=\"email\"]"
+  email_fallbacks:
+    - "input[name=\"email\"]"
+    - "#email"
+    - "input[placeholder*=\"email\" i]"
+  password: "input[type=\"password\"]"
+  loginButton: "button[type=\"submit\"]"
+  messageInput: "textarea"
+  sendButton: "button[aria-label=\"Send\"]"
+  response: ".message-content"
+  response_fallbacks:
+    - ".chat-response"
+    - "[data-message-type=\"assistant\"]"
+    - ".ai-message"
+
+captcha:
+  enabled: true
+  selectors:
+    - "iframe[src*='captcha']"
+    - "#captcha"
+    - ".recaptcha-container"
+
+settings:
+  slowLoad: false
+  requiresAuth: true  # Requires proper authentication
+  timeout: 60000
+  captcha_wait: 120000
+  auth_required: true
+
+# Expected Response
+expected_model: "Z.ai (Zhipu AI GLM-4.5)"
+expected_response_pattern: ".*z\\.ai.*"
+
+# Test Results (from your manual testing)
+test_results:
+  status: "FAILED"
+  issue: "Message input not found"
+  fix_applied: "requiresAuth flag + multiple email selector fallbacks"
+  notes: "Requires proper login flow - message input selector not found"
+  recommendation: "Verify authentication completes before searching for message input"
+
