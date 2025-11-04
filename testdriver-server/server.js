@@ -147,9 +147,9 @@ app.use(errorHandler);
 
 const PORT = config.server.port;
 
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
   logger.info('═'.repeat(70));
-  logger.info('🚀  TestDriver Proxy Server Started (Refactored Architecture)');
+  logger.info('🚀  TestDriver Server Started - Phase 2A Features Enabled');
   logger.info('═'.repeat(70));
   logger.info(`Environment:        ${config.server.env}`);
   logger.info(`Port:               ${PORT}`);
@@ -158,9 +158,15 @@ const server = app.listen(PORT, () => {
   logger.info(`Base URL:           ${config.llm.baseUrl}`);
   logger.info(`TestDriver Version: ${config.testdriver.version}`);
   logger.info('─'.repeat(70));
-  logger.info('Architecture:       Service Layer + Dependency Injection');
-  logger.info('State Management:   Centralized Stores');
+  logger.info('Architecture:       Event-Driven + Service Layer + DI');
+  logger.info('State Management:   Centralized Stores + Event Bus');
   logger.info('API Version:        v1 (versioned)');
+  logger.info('═'.repeat(70));
+  logger.info('Phase 2A Features:');
+  logger.info('  ✅  Event System (40+ event types)');
+  logger.info('  ✅  WebSocket Streaming (real-time)');
+  logger.info('  ✅  Session Recording (dashcam-style)');
+  logger.info('  ✅  Advanced Session Management');
   logger.info('═'.repeat(70));
   logger.info('API Endpoints:');
   logger.info(`  GET  http://localhost:${PORT}/             - Server info`);
@@ -171,6 +177,29 @@ const server = app.listen(PORT, () => {
   logger.info(`  POST http://localhost:${PORT}/api/v1/save     - Save tests`);
   logger.info(`  POST http://localhost:${PORT}/api/v1/validate - Validate YAML`);
   logger.info('═'.repeat(70));
+
+  // Initialize Phase 2A Services with HTTP server
+  try {
+    const container = require('./src/core/container');
+    const eventBus = container.resolve('eventBus');
+    
+    // Initialize WebSocket service
+    const WebSocketService = require('./src/services/WebSocketService');
+    const webSocketService = new WebSocketService(server, eventBus);
+    await webSocketService.initialize();
+    container.registerInstance('webSocketService', webSocketService);
+    
+    // Initialize Streaming service
+    const StreamingService = require('./src/services/StreamingService');
+    const streamingService = new StreamingService(eventBus, webSocketService);
+    await streamingService.initialize();
+    container.registerInstance('streamingService', streamingService);
+    
+    logger.info('✅  WebSocket & Streaming services initialized');
+    logger.info(`    WebSocket endpoint: ws://localhost:${PORT}`);
+  } catch (error) {
+    logger.error('Failed to initialize Phase 2A services:', error);
+  }
 
   // Start cleanup tasks
   startCleanupTasks();
@@ -209,4 +238,3 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 module.exports = app;
-

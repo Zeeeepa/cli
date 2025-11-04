@@ -12,6 +12,29 @@ const logger = getLogger('bootstrap');
 function bootstrap() {
   logger.info('Bootstrapping application...');
 
+  // Event System - Register first so other services can use it
+  container.register('eventStore', () => {
+    const EventStore = require('../stores/EventStore');
+    const eventStore = new EventStore({
+      storageDir: config.EVENT_STORAGE_DIR || './data/events',
+      maxFileSize: 10 * 1024 * 1024, // 10MB
+      compression: true
+    });
+    // Initialize asynchronously
+    eventStore.initialize().catch(err => {
+      logger.error('Failed to initialize EventStore', { error: err.message });
+    });
+    return eventStore;
+  }, { lifecycle: 'singleton' });
+
+  container.register('eventBus', (eventStore) => {
+    const EventBus = require('../core/EventBus');
+    return new EventBus({
+      maxLogSize: 1000,
+      persistence: eventStore
+    });
+  }, { lifecycle: 'singleton', dependencies: ['eventStore'] });
+
   // Stores
   container.register('sessionStore', () => {
     const SessionStore = require('../stores/SessionStore');
@@ -59,6 +82,23 @@ function bootstrap() {
     const PersistenceService = require('../services/PersistenceService');
     return new PersistenceService(sessionStore);
   }, { lifecycle: 'singleton', dependencies: ['sessionStore'] });
+
+  // Phase 2A Services - Advanced Features
+  container.register('recordingService', (eventBus) => {
+    const RecordingService = require('../services/RecordingService');
+    const service = new RecordingService(eventBus, {
+      storageDir: config.RECORDING_STORAGE_DIR || './data/recordings',
+      autoStart: config.RECORDING_AUTO_START !== false
+    });
+    // Initialize asynchronously
+    service.initialize().catch(err => {
+      logger.error('Failed to initialize RecordingService', { error: err.message });
+    });
+    return service;
+  }, { lifecycle: 'singleton', dependencies: ['eventBus'] });
+
+  // Note: WebSocketService and StreamingService are registered separately
+  // after HTTP server is created (see server.js)
 
   // Utilities
   container.register('imageProcessor', () => {
