@@ -1,0 +1,13 @@
+# Wrangler
+node_modules/
+.wrangler/
+.dev.vars
+dist/
+worker/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
