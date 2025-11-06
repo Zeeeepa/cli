@@ -2,6 +2,11 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { asyncHandler } = require('../../middleware/error-handler');
 const container = require('../../core/container');
+const { 
+  validateSessionId, 
+  validateStreamingOptions,
+  sanitizeObject 
+} = require('../../utils/validation');
 
 function createRouter() {
   const router = express.Router();
@@ -14,31 +19,27 @@ function createRouter() {
    */
   router.post('/:sessionId/start', asyncHandler(async (req, res) => {
     const { sessionId } = req.params;
-    const { options } = req.body;
     const requestId = req.headers['x-request-id'] || uuidv4();
 
-    try {
-      const result = await streamingService.startStreaming(sessionId, options);
-      
-      res.json({
-        success: true,
-        message: 'Streaming started successfully',
-        sessionId,
-        requestId,
-        stream: {
-          id: result.streamId,
-          startedAt: result.startedAt,
-          websocketUrl: result.websocketUrl || `ws://localhost:3001?session=${sessionId}`
-        }
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error.message,
-        sessionId,
-        requestId
-      });
-    }
+    // Validate input
+    validateSessionId(sessionId);
+    
+    const options = sanitizeObject(req.body.options || {});
+    validateStreamingOptions(options);
+
+    const result = await streamingService.startStreaming(sessionId, options);
+    
+    res.json({
+      success: true,
+      message: 'Streaming started successfully',
+      sessionId,
+      requestId,
+      stream: {
+        id: result,
+        startedAt: Date.now(),
+        websocketUrl: `ws://localhost:3001?session=${sessionId}`
+      }
+    });
   }));
 
   /**
@@ -49,29 +50,34 @@ function createRouter() {
     const { sessionId } = req.params;
     const requestId = req.headers['x-request-id'] || uuidv4();
 
-    try {
-      const result = await streamingService.stopStreaming(sessionId);
-      
-      res.json({
-        success: true,
-        message: 'Streaming stopped successfully',
-        sessionId,
-        requestId,
-        stream: {
-          id: result.streamId,
-          stoppedAt: result.stoppedAt,
-          duration: result.duration,
-          eventCount: result.eventCount
-        }
-      });
-    } catch (error) {
-      res.status(500).json({
+    // Validate input
+    validateSessionId(sessionId);
+
+    const result = await streamingService.stopStreaming(sessionId);
+    
+    if (!result) {
+      return res.status(404).json({
         success: false,
-        error: error.message,
+        error: {
+          type: 'not_found',
+          message: 'No active stream found for this session',
+          code: 'STREAM_NOT_FOUND'
+        },
         sessionId,
         requestId
       });
     }
+    
+    res.json({
+      success: true,
+      message: 'Streaming stopped successfully',
+      sessionId,
+      requestId,
+      stream: {
+        id: result,
+        stoppedAt: Date.now()
+      }
+    });
   }));
 
   /**
@@ -82,39 +88,37 @@ function createRouter() {
     const { sessionId } = req.params;
     const requestId = req.headers['x-request-id'] || uuidv4();
 
-    try {
-      const stream = streamingService.activeStreams.get(sessionId);
-      
-      if (!stream) {
-        return res.status(404).json({
-          success: false,
-          error: 'No active stream found for this session',
-          sessionId,
-          requestId
-        });
-      }
+    // Validate input
+    validateSessionId(sessionId);
 
-      stream.isPaused = true;
-      
-      res.json({
-        success: true,
-        message: 'Streaming paused successfully',
-        sessionId,
-        requestId,
-        stream: {
-          id: stream.streamId,
-          isPaused: true,
-          pausedAt: new Date()
-        }
-      });
-    } catch (error) {
-      res.status(500).json({
+    const stream = streamingService.activeStreams.get(sessionId);
+    
+    if (!stream) {
+      return res.status(404).json({
         success: false,
-        error: error.message,
+        error: {
+          type: 'not_found',
+          message: 'No active stream found for this session',
+          code: 'STREAM_NOT_FOUND'
+        },
         sessionId,
         requestId
       });
     }
+
+    stream.isPaused = true;
+    
+    res.json({
+      success: true,
+      message: 'Streaming paused successfully',
+      sessionId,
+      requestId,
+      stream: {
+        id: stream.streamId,
+        isPaused: true,
+        pausedAt: Date.now()
+      }
+    });
   }));
 
   /**
@@ -125,39 +129,37 @@ function createRouter() {
     const { sessionId } = req.params;
     const requestId = req.headers['x-request-id'] || uuidv4();
 
-    try {
-      const stream = streamingService.activeStreams.get(sessionId);
-      
-      if (!stream) {
-        return res.status(404).json({
-          success: false,
-          error: 'No active stream found for this session',
-          sessionId,
-          requestId
-        });
-      }
+    // Validate input
+    validateSessionId(sessionId);
 
-      stream.isPaused = false;
-      
-      res.json({
-        success: true,
-        message: 'Streaming resumed successfully',
-        sessionId,
-        requestId,
-        stream: {
-          id: stream.streamId,
-          isPaused: false,
-          resumedAt: new Date()
-        }
-      });
-    } catch (error) {
-      res.status(500).json({
+    const stream = streamingService.activeStreams.get(sessionId);
+    
+    if (!stream) {
+      return res.status(404).json({
         success: false,
-        error: error.message,
+        error: {
+          type: 'not_found',
+          message: 'No active stream found for this session',
+          code: 'STREAM_NOT_FOUND'
+        },
         sessionId,
         requestId
       });
     }
+
+    stream.isPaused = false;
+    
+    res.json({
+      success: true,
+      message: 'Streaming resumed successfully',
+      sessionId,
+      requestId,
+      stream: {
+        id: stream.streamId,
+        isPaused: false,
+        resumedAt: Date.now()
+      }
+    });
   }));
 
   /**
@@ -168,45 +170,40 @@ function createRouter() {
     const { sessionId } = req.params;
     const requestId = req.headers['x-request-id'] || uuidv4();
 
-    try {
-      const stream = streamingService.activeStreams.get(sessionId);
-      
-      if (!stream) {
-        return res.status(404).json({
-          success: false,
-          error: 'No active stream found for this session',
-          sessionId,
-          requestId,
-          stream: null
-        });
-      }
+    // Validate input
+    validateSessionId(sessionId);
 
-      res.json({
-        success: true,
-        sessionId,
-        requestId,
-        stream: {
-          id: stream.streamId,
-          isActive: stream.isActive,
-          isPaused: stream.isPaused,
-          startedAt: stream.startedAt,
-          connectedClients: stream.connectedClients || 0,
-          eventCount: stream.eventCount || 0,
-          duration: Date.now() - new Date(stream.startedAt).getTime()
-        }
-      });
-    } catch (error) {
-      res.status(500).json({
+    const stream = streamingService.activeStreams.get(sessionId);
+    
+    if (!stream) {
+      return res.status(404).json({
         success: false,
-        error: error.message,
+        error: {
+          type: 'not_found',
+          message: 'No active stream found for this session',
+          code: 'STREAM_NOT_FOUND'
+        },
         sessionId,
         requestId
       });
     }
+
+    res.json({
+      success: true,
+      sessionId,
+      requestId,
+      stream: {
+        id: stream.streamId,
+        isActive: stream.isActive,
+        isPaused: stream.isPaused,
+        startedAt: stream.startedAt,
+        connectedClients: stream.connectedClients || 0,
+        duration: Date.now() - stream.startedAt
+      }
+    });
   }));
 
   return router;
 }
 
 module.exports = createRouter;
-

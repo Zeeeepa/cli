@@ -2,6 +2,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { asyncHandler } = require('../../middleware/error-handler');
 const container = require('../../core/container');
+const { validateSessionId } = require('../../utils/validation');
 
 function createRouter() {
   const router = express.Router();
@@ -274,4 +275,3 @@ function createRouter() {
 }
 
 module.exports = createRouter;
-
