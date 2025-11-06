@@ -15,6 +15,9 @@ const EventTypes = {
   SESSION_PAUSED: 'session:paused',
   SESSION_RESUMED: 'session:resumed',
   SESSION_STATE_SNAPSHOT: 'session:state-snapshot',
+  SESSION_CREATED: 'session:created',
+  SESSION_DELETED: 'session:deleted',
+  SESSION_SNAPSHOT_RESTORED: 'session:snapshot-restored',
   
   // Step Execution Events
   STEP_STARTED: 'step:started',
@@ -22,6 +25,29 @@ const EventTypes = {
   STEP_FAILED: 'step:failed',
   STEP_SKIPPED: 'step:skipped',
   STEP_RETRYING: 'step:retrying',
+  
+  // Test Generation Events
+  TEST_GENERATION_STARTED: 'test.generation.started',
+  TEST_GENERATION_COMPLETED: 'test.generation.completed',
+  TEST_GENERATION_FAILED: 'test.generation.failed',
+  COMMAND_GENERATION_STARTED: 'command.generation.started',
+  COMMAND_GENERATION_COMPLETED: 'command.generation.completed',
+  COMMAND_GENERATION_FAILED: 'command.generation.failed',
+  
+  // Exploration Events
+  EXPLORATION_STARTED: 'exploration.started',
+  EXPLORATION_STEP_COMPLETED: 'exploration.step.completed',
+  EXPLORATION_STEP_FAILED: 'exploration.step.failed',
+  
+  // Persistence Events
+  TEST_SAVED: 'test.saved',
+  TEST_LOADED: 'test.loaded',
+  TEST_DELETED: 'test.deleted',
+  
+  // Validation Events
+  VALIDATION_STARTED: 'validation.started',
+  VALIDATION_COMPLETED: 'validation.completed',
+  VALIDATION_FAILED: 'validation.failed',
   
   // Recording Events
   RECORDING_STARTED: 'recording:started',
@@ -99,8 +125,146 @@ class BaseEvent {
 }
 
 /**
+ * Test Generation Event Classes
+ */
+class TestGenerationStartedEvent extends BaseEvent {
+  constructor(data = {}) {
+    const sessionId = data.sessionId || 'unknown';
+    super(EventTypes.TEST_GENERATION_STARTED, data, { sessionId });
+  }
+}
+
+class TestGenerationCompletedEvent extends BaseEvent {
+  constructor(data = {}) {
+    const sessionId = data.sessionId || 'unknown';
+    super(EventTypes.TEST_GENERATION_COMPLETED, data, { sessionId });
+  }
+}
+
+class TestGenerationFailedEvent extends BaseEvent {
+  constructor(data = {}) {
+    const sessionId = data.sessionId || 'unknown';
+    super(EventTypes.TEST_GENERATION_FAILED, data, { sessionId });
+  }
+}
+
+class CommandGenerationStartedEvent extends BaseEvent {
+  constructor(data = {}) {
+    const sessionId = data.sessionId || 'unknown';
+    super(EventTypes.COMMAND_GENERATION_STARTED, data, { sessionId });
+  }
+}
+
+class CommandGenerationCompletedEvent extends BaseEvent {
+  constructor(data = {}) {
+    const sessionId = data.sessionId || 'unknown';
+    super(EventTypes.COMMAND_GENERATION_COMPLETED, data, { sessionId });
+  }
+}
+
+class CommandGenerationFailedEvent extends BaseEvent {
+  constructor(data = {}) {
+    const sessionId = data.sessionId || 'unknown';
+    super(EventTypes.COMMAND_GENERATION_FAILED, data, { sessionId });
+  }
+}
+
+/**
+ * Exploration Event Classes
+ */
+class ExplorationStartedEvent extends BaseEvent {
+  constructor(data = {}) {
+    const sessionId = data.sessionId || 'unknown';
+    super(EventTypes.EXPLORATION_STARTED, data, { sessionId });
+  }
+}
+
+class ExplorationStepCompletedEvent extends BaseEvent {
+  constructor(data = {}) {
+    const sessionId = data.sessionId || 'unknown';
+    super(EventTypes.EXPLORATION_STEP_COMPLETED, data, { sessionId });
+  }
+}
+
+class ExplorationStepFailedEvent extends BaseEvent {
+  constructor(data = {}) {
+    const sessionId = data.sessionId || 'unknown';
+    super(EventTypes.EXPLORATION_STEP_FAILED, data, { sessionId });
+  }
+}
+
+/**
+ * Persistence Event Classes
+ */
+class TestSavedEvent extends BaseEvent {
+  constructor(data = {}) {
+    const sessionId = data.sessionId || 'unknown';
+    super(EventTypes.TEST_SAVED, data, { sessionId });
+  }
+}
+
+class TestLoadedEvent extends BaseEvent {
+  constructor(data = {}) {
+    const sessionId = data.sessionId || 'unknown';
+    super(EventTypes.TEST_LOADED, data, { sessionId });
+  }
+}
+
+class TestDeletedEvent extends BaseEvent {
+  constructor(data = {}) {
+    const sessionId = data.sessionId || 'unknown';
+    super(EventTypes.TEST_DELETED, data, { sessionId });
+  }
+}
+
+/**
+ * Validation Event Classes
+ */
+class ValidationStartedEvent extends BaseEvent {
+  constructor(data = {}) {
+    const sessionId = data.sessionId || 'unknown';
+    super(EventTypes.VALIDATION_STARTED, data, { sessionId });
+  }
+}
+
+class ValidationCompletedEvent extends BaseEvent {
+  constructor(data = {}) {
+    const sessionId = data.sessionId || 'unknown';
+    super(EventTypes.VALIDATION_COMPLETED, data, { sessionId });
+  }
+}
+
+class ValidationFailedEvent extends BaseEvent {
+  constructor(data = {}) {
+    const sessionId = data.sessionId || 'unknown';
+    super(EventTypes.VALIDATION_FAILED, data, { sessionId });
+  }
+}
+
+/**
  * Session Event Classes
  */
+class SessionCreatedEvent extends BaseEvent {
+  constructor(data = {}) {
+    const sessionId = data.sessionId || 'unknown';
+    super(EventTypes.SESSION_CREATED, data, { sessionId });
+  }
+}
+
+class SessionDeletedEvent extends BaseEvent {
+  constructor(data = {}) {
+    const sessionId = data.sessionId || 'unknown';
+    super(EventTypes.SESSION_DELETED, data, { sessionId });
+  }
+}
+
+class SessionSnapshotRestoredEvent extends BaseEvent {
+  constructor(data = {}) {
+    const sessionId = data.sessionId || 'unknown';
+    super(EventTypes.SESSION_SNAPSHOT_RESTORED, data, { sessionId });
+  }
+}
+
 class SessionStartedEvent extends BaseEvent {
   constructor(sessionId, data = {}) {
     super(EventTypes.SESSION_STARTED, data, { sessionId });
@@ -359,7 +523,33 @@ module.exports = {
   EventTypes,
   BaseEvent,
   
+  // Test Generation Events
+  TestGenerationStartedEvent,
+  TestGenerationCompletedEvent,
+  TestGenerationFailedEvent,
+  CommandGenerationStartedEvent,
+  CommandGenerationCompletedEvent,
+  CommandGenerationFailedEvent,
+  
+  // Exploration Events
+  ExplorationStartedEvent,
+  ExplorationStepCompletedEvent,
+  ExplorationStepFailedEvent,
+  
+  // Persistence Events
+  TestSavedEvent,
+  TestLoadedEvent,
+  TestDeletedEvent,
+  
+  // Validation Events
+  ValidationStartedEvent,
+  ValidationCompletedEvent,
+  ValidationFailedEvent,
+  
   // Session Events
+  SessionCreatedEvent,
+  SessionDeletedEvent,
+  SessionSnapshotRestoredEvent,
   SessionStartedEvent,
   SessionEndedEvent,
   SessionPausedEvent,
@@ -396,4 +586,3 @@ module.exports = {
   validateEvent,
   createEvent
 };
-

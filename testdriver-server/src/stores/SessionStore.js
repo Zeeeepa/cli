@@ -67,6 +67,11 @@ class SessionStore {
     return this.sessions.get(sessionId) || null;
   }
 
+  // Alias for get() for consistency with route expectations
+  getSession(sessionId) {
+    return this.get(sessionId);
+  }
+
   update(sessionId, updates) {
     const session = this.sessions.get(sessionId);
     
@@ -107,6 +112,11 @@ class SessionStore {
 
   getAll() {
     return Array.from(this.sessions.values());
+  }
+
+  // Alias for getAll() for consistency with route expectations
+  getAllSessions() {
+    return this.getAll();
   }
 
   count() {

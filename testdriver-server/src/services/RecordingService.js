@@ -494,6 +494,108 @@ class RecordingService {
   }
 
   /**
+   * Get recording metadata by session ID
+   * 
+   * @param {string} sessionId - Session ID
+   * @returns {Promise<Object>} Recording metadata
+   */
+  async getRecordingMetadata(sessionId) {
+    // Check if there's an active recording for this session
+    const activeRecording = this.activeRecordings.get(sessionId);
+    if (activeRecording) {
+      return {
+        recordingId: activeRecording.recordingId,
+        sessionId: activeRecording.sessionId,
+        startedAt: activeRecording.startedAt,
+        duration: Date.now() - activeRecording.startedAt,
+        status: 'active',
+        stats: {
+          screenshots: activeRecording.screenshots.length,
+          domSnapshots: activeRecording.domSnapshots.length,
+          steps: activeRecording.steps.length,
+          networkLogs: activeRecording.networkLogs.length,
+          consoleLogs: activeRecording.consoleLogs.length
+        }
+      };
+    }
+
+    // If not active, search for completed recordings
+    try {
+      const entries = await fs.readdir(this.config.storageDir, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        if (entry.isDirectory() && entry.name.startsWith('rec_')) {
+          const recording = await this.getRecording(entry.name);
+          if (recording && recording.sessionId === sessionId) {
+            return {
+              recordingId: recording.recordingId,
+              sessionId: recording.sessionId,
+              startedAt: recording.startedAt,
+              duration: recording.duration,
+              status: 'completed',
+              stats: recording.stats
+            };
+          }
+        }
+      }
+
+      return null;
+    } catch (error) {
+      logger.error('Error getting recording metadata', {
+        sessionId,
+        error: error.message
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Delete a recording by session ID
+   * 
+   * @param {string} sessionId - Session ID
+   * @returns {Promise<boolean>} Success status
+   */
+  async deleteRecording(sessionId) {
+    try {
+      // Stop active recording if exists
+      if (this.activeRecordings.has(sessionId)) {
+        await this.stopRecording(sessionId);
+      }
+
+      // Find and delete recording directory
+      const entries = await fs.readdir(this.config.storageDir, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        if (entry.isDirectory() && entry.name.startsWith('rec_')) {
+          const recording = await this.getRecording(entry.name);
+          if (recording && recording.sessionId === sessionId) {
+            const recordingDir = path.join(this.config.storageDir, entry.name);
+            
+            // Delete the entire recording directory
+            await fs.rm(recordingDir, { recursive: true, force: true });
+            
+            logger.info('Recording deleted', {
+              sessionId,
+              recordingId: entry.name
+            });
+            
+            return true;
+          }
+        }
+      }
+
+      logger.warn('No recording found for session', { sessionId });
+      return false;
+    } catch (error) {
+      logger.error('Error deleting recording', {
+        sessionId,
+        error: error.message
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Shutdown recording service
    */
   async shutdown() {
@@ -510,4 +612,3 @@ class RecordingService {
 }
 
 module.exports = RecordingService;
-
