@@ -14,12 +14,14 @@ const dotenv = require('dotenv');
 const morgan = require('morgan');
 const winston = require('winston');
 const cors = require('cors');
+const helmet = require('helmet');
 const sharp = require('sharp');
 const fs = require('fs').promises;
 const path = require('path');
 const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 const { v4: uuidv4 } = require('uuid');
+const promClient = require('prom-client');
 
 // Load environment variables
 dotenv.config();
@@ -54,6 +56,38 @@ const logger = winston.createLogger({
   ]
 });
 
+// Prometheus metrics
+const register = new promClient.Registry();
+promClient.collectDefaultMetrics({ register });
+
+const httpRequestDuration = new promClient.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  labelNames: ['method', 'route', 'status_code'],
+  registers: [register]
+});
+
+const httpRequestTotal = new promClient.Counter({
+  name: 'http_requests_total',
+  help: 'Total number of HTTP requests',
+  labelNames: ['method', 'route', 'status_code'],
+  registers: [register]
+});
+
+const llmApiCalls = new promClient.Counter({
+  name: 'llm_api_calls_total',
+  help: 'Total number of LLM API calls',
+  labelNames: ['provider', 'status'],
+  registers: [register]
+});
+
+const llmApiDuration = new promClient.Histogram({
+  name: 'llm_api_duration_seconds',
+  help: 'Duration of LLM API calls in seconds',
+  labelNames: ['provider'],
+  registers: [register]
+});
+
 // Express app
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -62,11 +96,28 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 // Middleware
 // ============================================================================
 
-// Request ID tracking
+// Security headers
+app.use(helmet({
+  contentSecurityPolicy: false, // Allow flexibility for API usage
+  crossOriginEmbedderPolicy: false
+}));
+
+// Request ID tracking & metrics
 app.use((req, res, next) => {
   req.id = uuidv4();
+  req.startTime = Date.now();
   res.setHeader('X-Request-ID', req.id);
   logger.info(`[${req.id}] ${req.method} ${req.path}`);
+  
+  // Track response metrics
+  res.on('finish', () => {
+    const duration = (Date.now() - req.startTime) / 1000;
+    const route = req.route?.path || req.path || 'unknown';
+    
+    httpRequestDuration.labels(req.method, route, res.statusCode).observe(duration);
+    httpRequestTotal.labels(req.method, route, res.statusCode).inc();
+  });
+  
   next();
 });
 
@@ -133,6 +184,7 @@ async function processScreenshot(base64Image) {
  * Call the configured LLM API (Z.ai, OpenAI, Anthropic, etc.) with retry logic
  */
 async function callLLM(messages, systemPrompt, stream = false, retries = 3) {
+  const startTime = Date.now();
   const headers = {
     'Content-Type': 'application/json'
   };
@@ -185,7 +237,13 @@ async function callLLM(messages, systemPrompt, stream = false, retries = 3) {
         timeout: 120000
       });
       
-      logger.debug(`LLM API call successful on attempt ${attempt}`);
+      const duration = (Date.now() - startTime) / 1000;
+      logger.debug(`LLM API call successful on attempt ${attempt}, duration: ${duration}s`);
+      
+      // Track successful API call metrics
+      llmApiCalls.labels(config.apiProvider, 'success').inc();
+      llmApiDuration.labels(config.apiProvider).observe(duration);
+      
       return response.data;
     } catch (error) {
       const isRetryable = error.code === 'ECONNRESET' || 
@@ -905,6 +963,17 @@ app.get('/health/full', async (req, res) => {
   healthStatus.responseTime = `${responseTime}ms`;
   
   res.json(healthStatus);
+});
+
+// Prometheus metrics endpoint
+app.get('/metrics', async (req, res) => {
+  try {
+    res.set('Content-Type', register.contentType);
+    res.end(await register.metrics());
+  } catch (error) {
+    logger.error('Error generating metrics:', error);
+    res.status(500).json({ error: 'Failed to generate metrics' });
+  }
 });
 
 app.get('/', (req, res) => {
