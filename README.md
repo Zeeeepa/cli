@@ -1,123 +1,6 @@
-## 🚀 Overview
+<a href="https://testdriver.ai"><img src="https://github.com/dashcamio/testdriver/assets/318295/2a0ad981-8504-46f0-ad97-60cb6c26f1e7"/></a>
 
-This PR adds a powerful `testui` command with flexible argument parsing and comprehensive Z.ai setup documentation.
-
-## ✨ New Features
-
-### testui Command
-```bash
-# Natural language testing
-testui PROMPT="login with demo@testdriver.ai"
-
-# YAML test file execution  
-testui TEST="tests/login.yaml"
-
-# External app testing
-testui APP="http://localhost:3000" PROMPT="test checkout flow"
-
-# Shorthand (positional)
-testui "click all buttons"
-```
-
-**Key Features:**
-- ✅ PROMPT="text" - Natural language test execution
-- ✅ TEST="file.yaml" - YAML test file execution
-- ✅ APP="url" - Test external applications
-- ✅ Positional argument support (shorthand syntax)
-- ✅ Automatic ANTHROPIC_API_KEY validation
-- ✅ Built-in help command (--help, -h)
-- ✅ Proper error handling and cleanup
-- ✅ External app testing capability
-
-### context Command
-- View current page context for debugging
-- Helps understand page structure during test development
-
-## 📖 Updated Documentation
-
-### Clear 4-Step Quick Start
-```bash
-# Step 1: Clone & Install
-git clone https://github.com/Zeeeepa/cli.git
-cd cli/testdriver-proxy
-npm install
-
-# Step 2: Get Z.ai API Key (Free)
-Visit https://z.ai and sign up
-
-# Step 3: Configure
-export ANTHROPIC_API_KEY="your-zai-api-key"
-echo 'export ANTHROPIC_API_KEY="your-key"' >> ~/.bashrc
-
-# Step 4: Test It!
-testui PROMPT="login with demo@testdriver.ai"
-```
-
-**Documentation Improvements:**
-- ✅ Z.ai API key setup instructions
-- ✅ ANTHROPIC_API_KEY environment variable explained
-- ✅ Complete usage examples for all scenarios
-- ✅ Persistence configuration (bashrc/zshrc)
-- ✅ All command variations documented
-
-## 🛡️ Robustness & Error Handling
-
-- ✅ Validates ANTHROPIC_API_KEY before starting tests
-- ✅ Clear error messages if API key is missing
-- ✅ Proper cleanup on errors and interrupts
-- ✅ Handles external app testing gracefully
-- ✅ Built-in help documentation
-
-## 🔧 Technical Improvements
-
-**server.js:**
-- Enhanced error handling
-- Better request/response validation
-- Structured logging
-- Timeout handling
-- Graceful degradation
-
-## 📦 Files Changed
-- `testdriver-proxy/bin/testui` (NEW) - Main test command
-- `testdriver-proxy/bin/context` (NEW) - Debug helper
-- `testdriver-proxy/README.md` - Complete rewrite with setup guide
-- `testdriver-proxy/server.js` - Enhanced robustness
-- `testdriver-proxy/package.json` - Updated scripts
-- `testdriver-proxy/.env.example` - Updated configuration
-
-## 🧪 Testing
-
-Tested with:
-- ✅ Z.ai API (GLM-4.5V model)
-- ✅ PROMPT argument parsing
-- ✅ TEST file execution
-- ✅ APP external URL testing
-- ✅ Error handling (missing API key)
-- ✅ Help command
-- ✅ Cleanup on errors and interrupts
-
-## 📝 Usage Examples
-
-```bash
-# Basic testing (auto-starts test app on port 4000)
-testui PROMPT="click all buttons and verify"
-testui PROMPT="login with test@example.com"
-
-# Test file execution
-testui TEST="path/to/test.yaml"
-testui TEST="tests/login-flow.yaml"
-
-# External app testing
-testui APP="http://localhost:3000" PROMPT="test checkout"
-testui APP="https://myapp.com" PROMPT="verify homepage"
-
-# Shorthand
-testui "click the signup button"
-```
-
----
-
-Ready for review and testing! 🎯
+# TestDriver.ai
 
 Automate and scale QA with computer-use agents.
 
@@ -126,6 +9,71 @@ Automate and scale QA with computer-use agents.
 # Install via NPM
 
 [Follow the instructions on our docs for more.](https://docs.testdriver.ai/overview/quickstart).
+
+## v7 SDK - Progressive Disclosure
+
+TestDriver v7 introduces **three levels of API** to match your experience level:
+
+### 🟢 Beginner: Presets (Zero Config)
+
+```javascript
+import { test } from 'vitest';
+import { chromePreset } from 'testdriverai/presets';
+
+test('login test', async (context) => {
+  const { client } = await chromePreset(context, {
+    url: 'https://myapp.com'
+  });
+  
+  await client.find('Login button').click();
+});
+```
+
+**Built-in presets:** Chrome, VS Code, Electron, and create your own!
+
+### 🟡 Intermediate: Hooks (Flexible)
+
+```javascript
+import { test } from 'vitest';
+import { useTestDriver, useDashcam } from 'testdriverai/vitest/hooks';
+
+test('my test', async (context) => {
+  const client = useTestDriver(context, { os: 'linux' });
+  const dashcam = useDashcam(context, client, {
+    autoStart: true,
+    autoStop: true
+  });
+  
+  await client.find('button').click();
+});
+```
+
+**Automatic lifecycle management** - no more forgetting cleanup!
+
+### 🔴 Advanced: Core Classes (Full Control)
+
+```javascript
+import { test } from 'vitest';
+import { TestDriver, Dashcam } from 'testdriverai/core';
+
+test('my test', async () => {
+  const client = new TestDriver(apiKey, { os: 'linux' });
+  const dashcam = new Dashcam(client);
+  
+  await client.auth();
+  await client.connect();
+  await dashcam.start();
+  
+  await client.find('button').click();
+  
+  await dashcam.stop();
+  await client.disconnect();
+});
+```
+
+**Full manual control** for advanced scenarios.
+
+📖 **Learn more:** [MIGRATION.md](./docs/MIGRATION.md) | [PRESETS.md](./docs/PRESETS.md) | [HOOKS.md](./docs/HOOKS.md)
 
 # About
 
@@ -303,3 +251,64 @@ You can also set the default test file path using environment variables:
 export TD_DEFAULT_TEST_FILE="custom/path/test.yaml"
 node your-script.js
 ```
+
+## MCP Server for AI Agents
+
+TestDriver includes a Model Context Protocol (MCP) server that enables AI agents to **interactively create Vitest test files**.
+
+### How It Works
+
+1. **AI agent connects** to a persistent TestDriver sandbox
+2. **User describes** what they want to test
+3. **AI explores** the application using TestDriver commands
+4. **AI generates** Vitest test code from successful interactions
+
+### Quick Start
+
+```bash
+cd mcp-server
+npm install && npm run build
+npm run deploy  # Install to ~/.mcp/testdriver
+```
+
+### Configuration
+
+Add to your MCP client configuration:
+
+```json
+{
+  "servers": {
+    "testdriverai": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/path/to/cli/mcp-server/dist/index.js"]
+    }
+  }
+}
+```
+
+### Example Workflow
+
+```
+User: "Create a test that logs into the app"
+
+AI: [Connects to sandbox with user's API key]
+AI: [Takes screenshot to see login page]
+AI: [Finds username field: await testdriver_find({ description: "username field" })]
+AI: [Clicks and types: await testdriver_type({ text: "test_user" })]
+AI: [Finds password field, enters password]
+AI: [Clicks login button]
+AI: [Asserts login succeeded]
+AI: [Generates Vitest test file from these steps]
+AI: [Saves test/login.test.mjs]
+```
+
+### Key Features
+
+- **Persistent sandbox** - Connection stays alive throughout test creation
+- **Live debugger URL** - User can watch the AI test in real-time
+- **Full SDK access** - All v7 SDK methods available
+- **Code generation** - AI translates interactions into proper Vitest code
+
+See [mcp-server/TEST_CREATION_GUIDE.md](mcp-server/TEST_CREATION_GUIDE.md) for the complete guide.
+
