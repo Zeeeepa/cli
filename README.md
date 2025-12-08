@@ -83,6 +83,39 @@ TestDriver isn't like any test framework you've used before. TestDriver is an OS
 - **Less Maintenance:** Tests don't break when code changes
 - **More Power:** TestDriver can test any application and control any OS setting
 
+## 🏖️ Dedicated Sandbox Environment
+
+This project includes a **dedicated minimized sandbox** for TestDriver execution:
+
+**Repository:** [Zeeeepa/playwright-sandbox](https://github.com/Zeeeepa/playwright-sandbox)
+
+The sandbox provides:
+- ✅ **Isolated browser environment** for safe test execution
+- ✅ **Optimized Playwright setup** specifically for TestDriver
+- ✅ **Minimal dependencies** for faster startup and execution
+- ✅ **Pre-configured infrastructure** for consistent test environments
+
+**Why a dedicated sandbox?**
+- TestDriver requires a controlled browser environment to execute tests
+- The sandbox ensures tests run in isolation without affecting your local system
+- Provides consistent results across different machines and CI/CD environments
+- Optimized specifically for TestDriver's AI-powered visual testing needs
+
+**Usage:**
+```bash
+# Clone the sandbox repository
+git clone https://github.com/Zeeeepa/playwright-sandbox.git
+
+# Follow sandbox-specific setup instructions in that repository
+cd playwright-sandbox
+npm install
+
+# Use with TestDriver CLI
+TD_SANDBOX_URL=<your-sandbox-url> npx testdriverai run test.yaml
+```
+
+For more information about the sandbox architecture and configuration, see the [playwright-sandbox repository](https://github.com/Zeeeepa/playwright-sandbox).
+
 ### Demo (Playing Balatro Desktop)
 
 https://github.com/user-attachments/assets/7cb9ee5a-0d05-4ff0-a4fa-084bcee12e98
@@ -311,4 +344,3 @@ AI: [Saves test/login.test.mjs]
 - **Code generation** - AI translates interactions into proper Vitest code
 
 See [mcp-server/TEST_CREATION_GUIDE.md](mcp-server/TEST_CREATION_GUIDE.md) for the complete guide.
-
