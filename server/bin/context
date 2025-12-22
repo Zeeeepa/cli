@@ -1,0 +1,79 @@
+#!/usr/bin/env node
+
+const { Builder, By } = require('selenium-webdriver');
+const chrome = require('selenium-webdriver/chrome');
+
+const colors = {
+  reset: '\x1b[0m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  cyan: '\x1b[36m'
+};
+
+function log(color, msg) {
+  console.log(colors[color] + msg + colors.reset);
+}
+
+async function getContext(url) {
+  url = url || 'http://localhost:4000';
+  log('cyan', '\n🔍 Retrieving context from: ' + url + '\n');
+  
+  const options = new chrome.Options();
+  options.addArguments('--headless', '--no-sandbox', '--disable-dev-shm-usage');
+  
+  const driver = await new Builder()
+    .forBrowser('chrome')
+    .setChromeOptions(options)
+    .build();
+  
+  try {
+    await driver.get(url);
+    await driver.sleep(1000);
+    
+    const title = await driver.getTitle();
+    const currentUrl = await driver.getCurrentUrl();
+    
+    log('green', '✅ Page: ' + title);
+    log('cyan', '   URL: ' + currentUrl + '\n');
+    
+    // Get buttons
+    const buttons = await driver.findElements(By.css('button, input[type="button"], input[type="submit"]'));
+    if (buttons.length > 0) {
+      log('yellow', '📍 Buttons (' + buttons.length + '):');
+      for (let i = 0; i < Math.min(buttons.length, 10); i++) {
+        try {
+          if (await buttons[i].isDisplayed()) {
+            const text = await buttons[i].getText() || await buttons[i].getAttribute('id') || 'button';
+            log('cyan', '   ' + (i+1) + '. ' + text);
+          }
+        } catch(e) {}
+      }
+      console.log();
+    }
+    
+    // Get inputs
+    const inputs = await driver.findElements(By.css('input, textarea'));
+    if (inputs.length > 0) {
+      log('yellow', '📝 Input Fields (' + inputs.length + '):');
+      for (let i = 0; i < Math.min(inputs.length, 10); i++) {
+        try {
+          if (await inputs[i].isDisplayed()) {
+            const type = await inputs[i].getAttribute('type');
+            const placeholder = await inputs[i].getAttribute('placeholder') || await inputs[i].getAttribute('id') || type;
+            log('cyan', '   ' + (i+1) + '. ' + placeholder + ' (' + type + ')');
+          }
+        } catch(e) {}
+      }
+      console.log();
+    }
+    
+  } finally {
+    await driver.quit();
+  }
+}
+
+const url = process.argv[2];
+getContext(url).catch(err => {
+  console.error('Error:', err.message);
+  process.exit(1);
+});
