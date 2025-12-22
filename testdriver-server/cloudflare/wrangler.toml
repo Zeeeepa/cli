@@ -1,0 +1,25 @@
+name = "testdriver-proxy"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+account_id = ""
+
+workers_dev = true
+
+[vars]
+CORS_ORIGINS = "*"
+RATE_LIMIT = "100"
+RATE_LIMIT_ENABLED = "false"
+TIMEOUT = "30000"
+DEBUG = "false"
+
+[env.production]
+name = "testdriver-proxy-production"
+
+[env.development]
+name = "testdriver-proxy-dev"
+vars = { DEBUG = "true", RATE_LIMIT_ENABLED = "false" }
+
+[env.staging]
+name = "testdriver-proxy-staging"
+vars = { DEBUG = "true", RATE_LIMIT_ENABLED = "false" }

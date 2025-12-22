@@ -1,0 +1,30 @@
+{
+  "name": "testdriver-cloudflare-worker",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker proxy for TestDriver.ai Server",
+  "main": "worker.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:prod": "wrangler deploy --env production",
+    "deploy:staging": "wrangler deploy --env staging",
+    "tail": "wrangler tail",
+    "tail:prod": "wrangler tail --env production",
+    "deployments": "wrangler deployments list",
+    "rollback": "wrangler rollback",
+    "login": "wrangler login",
+    "whoami": "wrangler whoami"
+  },
+  "keywords": [
+    "cloudflare",
+    "workers",
+    "testdriver",
+    "proxy",
+    "websocket"
+  ],
+  "author": "TestDriver Team",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}
