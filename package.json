@@ -7,6 +7,8 @@
     "testdriverai": "bin/testdriverai.js"
   },
   "scripts": {
+    "build": "echo 'Build not required - using runtime execution'",
+    "testui": "node testdriver-proxy/bin/testui",
     "start": "node bin/testdriverai.js",
     "dev": "DEV=true node bin/testdriverai.js",
     "debug": "DEV=true VERBOSE=true node bin/testdriverai.js",
@@ -27,6 +29,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@anthropic-ai/sandbox-runtime": "github:Zeeeepa/sandbox-runtime",
     "@anthropic-ai/sdk": "^0.65.0",
     "@npmcli/redact": "^3.2.2",
     "@oclif/core": "^4.5.0",

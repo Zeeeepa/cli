@@ -1,33 +1,46 @@
 ## 🚀 Overview
 
-This PR adds a powerful `testui` command with flexible argument parsing and comprehensive Z.ai setup documentation.
+**TestUI** - Next generation autonomous AI agent for end-to-end testing of web & desktop applications. Now with **local sandbox execution** for testing localhost applications securely.
 
-## ✨ New Features
+## ✨ Key Features
+
+### 🔐 Local Sandbox Execution
+- **Secure** - Sandboxed Chrome with filesystem/network restrictions
+- **Localhost Testing** - Test apps on localhost directly
+- **No Cloud Required** - Everything runs locally
+- **Fast** - No network latency
+- **Private** - Your data never leaves your machine
+
+### 🤖 AI-Powered Testing
+- **Natural Language** - Write tests in plain English
+- **Vision-Based** - LLM analyzes screenshots and generates actions
+- **Self-Healing** - Auto-recovery from failures
+- **Credential Support** - Parse tokens, usernames, passwords from prompts
 
 ### testui Command
 ```bash
-# Natural language testing
-testui PROMPT="login with demo@testdriver.ai"
+# Natural language testing with localhost
+testui "test localhost:8080 login flow using username admin password secret"
 
-# YAML test file execution  
-testui TEST="tests/login.yaml"
+# Complex workflow testing
+testui "on localhost:3000 test checkout: add product to cart, verify price, complete purchase"
 
-# External app testing
-testui APP="http://localhost:3000" PROMPT="test checkout flow"
+# With credentials
+testui "visit localhost:5000 using token abc123 test all features"
 
-# Shorthand (positional)
-testui "click all buttons"
+# Positional argument (shorthand)
+testui "click all buttons on localhost:4000"
 ```
 
 **Key Features:**
-- ✅ PROMPT="text" - Natural language test execution
-- ✅ TEST="file.yaml" - YAML test file execution
-- ✅ APP="url" - Test external applications
-- ✅ Positional argument support (shorthand syntax)
-- ✅ Automatic ANTHROPIC_API_KEY validation
-- ✅ Built-in help command (--help, -h)
-- ✅ Proper error handling and cleanup
-- ✅ External app testing capability
+- ✅ **Local sandbox execution** with security boundaries
+- ✅ **Localhost support** - Test apps on any port
+- ✅ **Natural language** - No YAML writing required
+- ✅ **Credential extraction** - Parse tokens/passwords from prompts
+- ✅ **Domain auto-detection** - Automatically allow domains from prompts
+- ✅ **Screenshot capture** - Save to ./screenshots
+- ✅ **Violation tracking** - Clear error messages for sandbox violations
+- ✅ **Cross-platform** - macOS (sandbox-exec) and Linux (bubblewrap)
 
 ### context Command
 - View current page context for debugging

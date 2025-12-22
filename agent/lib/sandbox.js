@@ -3,6 +3,63 @@ const marky = require("marky");
 const { events } = require("../events");
 
 const createSandbox = (emitter, analytics) => {
+  // Check if local sandbox should be used
+  if (process.env.USE_LOCAL_SANDBOX === 'true') {
+    // Return a stub that indicates local sandbox is being used
+    class LocalSandboxStub {
+      constructor() {
+        this.isLocal = true;
+        this.instanceId = 'local-sandbox-' + Date.now();
+        this.instance = {
+          id: this.instanceId,
+          status: 'running',
+          ip: '127.0.0.1',
+          type: 'local'
+        };
+      }
+      
+      async boot() {
+        // No-op: Local sandbox initialized in testui script
+        console.log('[Sandbox] Using local sandbox-runtime (not remote WebSocket)');
+        return {
+          sandbox: {
+            instanceId: this.instanceId,
+            instance: this.instance
+          }
+        };
+      }
+      
+      async auth() {
+        return true;
+      }
+      
+      async connect() {
+        return { 
+          status: 'local',
+          instanceId: this.instanceId,
+          instance: this.instance
+        };
+      }
+      
+      send(config) {
+        // Return sandbox info for local mode
+        if (config && config.type === 'create') {
+          return Promise.resolve({
+            sandbox: {
+              instanceId: this.instanceId,
+              instance: this.instance
+            }
+          });
+        }
+        return Promise.resolve({});
+      }
+    }
+    
+    return new LocalSandboxStub();
+  }
+  
+  // REMOTE SANDBOX (WebSocket-based) - LEGACY/FALLBACK
+  // This is kept for backwards compatibility but not used when USE_LOCAL_SANDBOX=true
   class Sandbox {
     constructor() {
       this.socket = null;
