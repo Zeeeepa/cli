@@ -1,0 +1,13 @@
+preRun: |
+  Navigate to http://localhost:4000
+  
+dashboards:
+  "Test Dashboard":
+    description: Simple UI test
+    capabilities:
+      - Click buttons
+      - Verify elements
+      
+assertions:
+  - Check that page loaded successfully
+  - Verify buttons are clickable
