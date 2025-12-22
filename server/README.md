@@ -42,7 +42,7 @@
 ### Step 1: Clone & Install
 ```bash
 git clone https://github.com/Zeeeepa/cli.git
-cd cli/testdriver-proxy
+cd cli/server
 npm install
 ```
 
@@ -229,7 +229,7 @@ cd tests/scripts
 ## Project Structure
 
 ```
-testdriver-proxy/
+server/
 ├── server.js              # Main Express.js server (830 lines)
 ├── DOCUMENTATION.md       # Complete documentation (800+ lines)
 ├── package.json           # Dependencies

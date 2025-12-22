@@ -61,7 +61,7 @@ A production-ready proxy server that enables [TestDriver.ai](https://testdriver.
 ```bash
 # Clone the repository
 git clone https://github.com/Zeeeepa/cli.git
-cd cli/testdriver-proxy
+cd cli/server
 
 # Install dependencies
 npm install
@@ -115,7 +115,7 @@ curl -X POST http://localhost:8080/api/1.0.0/testdriver/input \
 ### Directory Structure
 
 ```
-testdriver-proxy/
+server/
 ├── server.js                      # Main Express.js server (830 lines)
 ├── package.json                   # Dependencies and scripts
 ├── DOCUMENTATION.md               # This file - consolidated docs
@@ -143,7 +143,7 @@ testdriver-proxy/
 │       └── ui_feature_tests.py  # UI feature tests
 │
 └── .github/workflows/
-    └── testdriver-proxy-ci.yml   # CI/CD pipeline (191 lines)
+    └── server-ci.yml   # CI/CD pipeline (191 lines)
 ```
 
 ### Project Statistics
@@ -459,7 +459,7 @@ node server.js
 
 ```bash
 # Build the image
-docker build -t testdriver-proxy .
+docker build -t server .
 
 # Run the container
 docker run -p 8080:8080 \
@@ -467,7 +467,7 @@ docker run -p 8080:8080 \
   -e API_KEY=your-key \
   -e API_BASE_URL=https://api.z.ai/api/anthropic \
   -e MODEL=glm-4.5v \
-  testdriver-proxy
+  server
 ```
 
 #### Docker Compose
@@ -603,7 +603,7 @@ TEMPERATURE=0.7
 
 #### 3. CI/CD Module (.github/workflows/)
 
-**testdriver-proxy-ci.yml (191 lines)**
+**server-ci.yml (191 lines)**
 
 **Features:**
 - Automated testing on push/PR
@@ -691,7 +691,7 @@ cd tests/scripts
 docker builder prune -a
 
 # Rebuild without cache
-docker build --no-cache -t testdriver-proxy .
+docker build --no-cache -t server .
 ```
 
 ### Debug Mode
@@ -705,7 +705,7 @@ LOG_LEVEL=debug
 View server logs:
 ```bash
 # Check proxy logs
-cat testdriver-proxy/proxy.log
+cat server/proxy.log
 
 # Check test app logs
 cat tests/ui/test-app/app.log
@@ -726,7 +726,7 @@ cat tests/ui/test-app/app.log
 ```bash
 # Clone and install
 git clone https://github.com/Zeeeepa/cli.git
-cd cli/testdriver-proxy
+cd cli/server
 npm install
 
 # Create development .env

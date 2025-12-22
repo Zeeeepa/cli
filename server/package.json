@@ -1,5 +1,5 @@
 {
-  "name": "testdriver-proxy",
+  "name": "server",
   "version": "1.0.0",
   "description": "Proxy server to use TestDriver.ai with any LLM API (Z.ai, OpenAI, Anthropic)",
   "main": "server.js",
@@ -15,8 +15,8 @@
     "validate": "./start-validation.sh",
     "deploy": "./deploy-and-test.sh",
     "execute": "./execute-test.sh",
-    "docker:build": "docker build -t testdriver-proxy .",
-    "docker:run": "docker run -p 8080:8080 --env-file .env testdriver-proxy",
+    "docker:build": "docker build -t server .",
+    "docker:run": "docker run -p 8080:8080 --env-file .env server",
     "docker:compose:up": "docker-compose up -d",
     "docker:compose:down": "docker-compose down",
     "docker:compose:logs": "docker-compose logs -f"
@@ -60,10 +60,10 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/Zeeeepa/cli.git",
-    "directory": "testdriver-proxy"
+    "directory": "server"
   },
   "bugs": {
     "url": "https://github.com/Zeeeepa/cli/issues"
   },
-  "homepage": "https://github.com/Zeeeepa/cli/tree/main/testdriver-proxy#readme"
+  "homepage": "https://github.com/Zeeeepa/cli/tree/main/server#readme"
 }

@@ -1,5 +1,5 @@
 [project]
-name = "testdriver-proxy"
+name = "server"
 version = "0.1.0"
 description = "Proxy server to use Z.ai (GLM) models with TestDriver"
 readme = "README.md"
@@ -24,7 +24,7 @@ dev = [
 ]
 
 [project.scripts]
-testdriver-proxy = "testdriver_proxy.main:main"
+server = "testdriver_proxy.main:main"
 
 [build-system]
 requires = ["hatchling"]

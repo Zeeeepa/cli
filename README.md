@@ -39,7 +39,7 @@ testui "click all buttons"
 ```bash
 # Step 1: Clone & Install
 git clone https://github.com/Zeeeepa/cli.git
-cd cli/testdriver-proxy
+cd cli/server
 npm install
 
 # Step 2: Get Z.ai API Key (Free)
@@ -78,12 +78,12 @@ testui PROMPT="login with demo@testdriver.ai"
 - Graceful degradation
 
 ## 📦 Files Changed
-- `testdriver-proxy/bin/testui` (NEW) - Main test command
-- `testdriver-proxy/bin/context` (NEW) - Debug helper
-- `testdriver-proxy/README.md` - Complete rewrite with setup guide
-- `testdriver-proxy/server.js` - Enhanced robustness
-- `testdriver-proxy/package.json` - Updated scripts
-- `testdriver-proxy/.env.example` - Updated configuration
+- `server/bin/testui` (NEW) - Main test command
+- `server/bin/context` (NEW) - Debug helper
+- `server/README.md` - Complete rewrite with setup guide
+- `server/server.js` - Enhanced robustness
+- `server/package.json` - Updated scripts
+- `server/.env.example` - Updated configuration
 
 ## 🧪 Testing
 
@@ -428,4 +428,3 @@ AI: [Saves test/login.test.mjs]
 - **Code generation** - AI translates interactions into proper Vitest code
 
 See [mcp-server/TEST_CREATION_GUIDE.md](mcp-server/TEST_CREATION_GUIDE.md) for the complete guide.
-
