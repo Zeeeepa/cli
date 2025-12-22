@@ -1,8 +1,28 @@
 const { events } = require("../events");
+const crypto = require("crypto");
 
 // get the version from package.json
 const { version } = require("../../package.json");
 const axios = require("axios");
+
+/**
+ * Generate Sentry trace headers for distributed tracing
+ * Uses the same trace ID derivation as the API (MD5 hash of session ID)
+ * @param {string} sessionId - The session ID
+ * @returns {Object} Headers object with sentry-trace and baggage
+ */
+function getSentryTraceHeaders(sessionId) {
+  if (!sessionId) return {};
+  
+  // Same logic as API: derive trace ID from session ID
+  const traceId = crypto.createHash('md5').update(sessionId).digest('hex');
+  const spanId = crypto.randomBytes(8).toString('hex');
+  
+  return {
+    'sentry-trace': `${traceId}-${spanId}-1`,
+    'baggage': `sentry-trace_id=${traceId},sentry-sample_rate=1.0,sentry-sampled=true`
+  };
+}
 
 // Factory function that creates SDK with the provided emitter, config, and session
 let token = null;
@@ -116,13 +136,19 @@ const createSDK = (emitter, config, sessionInstance) => {
       ? [config["TD_API_ROOT"], path].join("")
       : [config["TD_API_ROOT"], "api", version, "testdriver", path].join("/");
 
+    // Get session ID for Sentry trace headers
+    const sessionId = sessionInstance.get();
+    const sentryHeaders = getSentryTraceHeaders(sessionId);
+
     const c = {
       method: "post",
       headers: {
         "Content-Type": "application/json",
         ...(token && { Authorization: `Bearer ${token}` }), // Add the authorization bearer token only if token is set
+        ...sentryHeaders, // Add Sentry distributed tracing headers
       },
       responseType: typeof onChunk === "function" ? "stream" : "json",
+      timeout: 60000, // 60 second timeout to prevent hanging requests
       data: {
         ...data,
         session: sessionInstance.get(),
@@ -193,6 +219,27 @@ const createSDK = (emitter, config, sessionInstance) => {
 
       return value;
     } catch (error) {
+      // Check if this is an API validation error with detailed problems
+      if (error.response?.data?.problems) {
+        const problems = error.response.data.problems;
+        const errorMessage = error.response.data.message || 'API validation error';
+        const detailedError = new Error(
+          `${errorMessage}\n\nDetails:\n${problems.map(p => `  - ${p}`).join('\n')}`
+        );
+        detailedError.originalError = error;
+        detailedError.problems = problems;
+        
+        // Emit the formatted error
+        emitter.emit(events.error.sdk, {
+          message: detailedError.message,
+          code: error.response?.data?.code || error.code,
+          problems: problems,
+          fullError: error,
+        });
+        
+        throw detailedError;
+      }
+      
       outputError(error);
       throw error; // Re-throw the error so calling code can handle it properly
     }

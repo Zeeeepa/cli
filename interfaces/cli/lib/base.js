@@ -23,6 +23,7 @@ async function openBrowser(url) {
     await open(url, {
       // Wait for the app to open
       wait: false,
+      background: true
     });
   } catch (error) {
     console.error("Failed to open browser automatically:", error);
@@ -37,10 +38,13 @@ class BaseCommand extends Command {
   }
 
   sendToSandbox(message) {
+    if (!message) return;
+
     // ensure message is a string
     if (typeof message !== "string") {
       message = JSON.stringify(message);
     }
+
     this.agent.sandbox.send({
       type: "output",
       output: Buffer.from(message).toString("base64"),
@@ -70,12 +74,13 @@ class BaseCommand extends Command {
     };
 
     let isConnected = false;
+    const debugMode = process.env.VERBOSE || process.env.DEBUG || process.env.TD_DEBUG;
 
-    // Use pattern matching for log events, but skip log:Debug
+    // Use pattern matching for log events, but skip log:Debug unless debug mode is enabled
     this.agent.emitter.on("log:*", (message) => {
       const event = this.agent.emitter.event;
 
-      if (event === events.log.debug) return;
+      if (event === events.log.debug && !debugMode) return;
 
       if (event === events.log.narration && isConnected) return;
       console.log(message);
@@ -94,7 +99,7 @@ class BaseCommand extends Command {
     });
 
     // Handle sandbox connection with pattern matching for subsequent events
-    this.agent.emitter.on("sandbox:connected", () => {
+    this.agent.emitter.once("sandbox:connected", () => {
       isConnected = true;
       // Once sandbox is connected, send all log and error events to sandbox
       this.agent.emitter.on("log:*", (message) => {
@@ -127,8 +132,31 @@ class BaseCommand extends Command {
     }
 
     this.agent.emitter.on("exit", (exitCode) => {
+      // Ensure sandbox is closed before exiting
+      if (this.agent?.sandbox) {
+        try {
+          this.agent.sandbox.close();
+        } catch (err) {
+          // Ignore close errors
+        }
+      }
       process.exit(exitCode);
     });
+
+    // Handle process signals to ensure clean disconnection
+    const cleanupAndExit = () => {
+      if (this.agent?.sandbox) {
+        try {
+          this.agent.sandbox.close();
+        } catch (err) {
+          // Ignore close errors
+        }
+      }
+      process.exit(1);
+    };
+
+    process.on('SIGINT', cleanupAndExit);
+    process.on('SIGTERM', cleanupAndExit);
 
     // Handle unhandled promise rejections to prevent them from interfering with the exit flow
     // This is particularly important when JavaScript execution in VM contexts leaves dangling promises
@@ -144,8 +172,12 @@ class BaseCommand extends Command {
       console.log(`Live test execution: `);
       if (this.agent.config.CI) {
         let u = new URL(url);
-        u = JSON.parse(u.searchParams.get("data"));
-        console.log(`${u.url}&view_only=true`);
+        try {
+          u = JSON.parse(u.searchParams.get("data"));
+          console.log(`${u.url}&view_only=true`);
+        } catch {
+          console.log(url);
+        }
       } else {
         console.log(url);
         await openBrowser(url);

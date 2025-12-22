@@ -1,8 +1,17 @@
 {
   "name": "testdriverai",
-  "version": "6.1.10",
+  "version": "7.2.9",
   "description": "Next generation autonomous AI agent for end-to-end testing of web & desktop",
-  "main": "index.js",
+  "main": "sdk.js",
+  "exports": {
+    ".": "./sdk.js",
+    "./core": "./lib/core/index.js",
+    "./vitest": "./interfaces/vitest-plugin.mjs",
+    "./vitest/plugin": "./interfaces/vitest-plugin.mjs",
+    "./vitest/setup": "./lib/vitest/setup.mjs",
+    "./vitest/hooks": "./lib/vitest/hooks.mjs",
+    "./presets": "./lib/presets/index.mjs"
+  },
   "bin": {
     "testdriverai": "bin/testdriverai.js"
   },
@@ -10,12 +19,22 @@
     "start": "node bin/testdriverai.js",
     "dev": "DEV=true node bin/testdriverai.js",
     "debug": "DEV=true VERBOSE=true node bin/testdriverai.js",
-    "docs": "node docs/_scripts/link-replacer.js && cd docs && npx mint@latest dev",
+    "docs": "cd docs && npx mint@latest dev",
     "docs:dev": "cd docs && npx mint dev",
-    "docs:build": "node docs/_scripts/link-replacer.js && cd docs && npx mint@latest build",
+    "docs:build": "cd docs && npx mint@latest build",
     "docs:links": "node docs/_scripts/link-replacer.js",
     "bundle": "node build.mjs",
     "test": "mocha test/*",
+    "test:sdk": "vitest run",
+    "test:sdk:windows": "TEST_PLATFORM=windows vitest run",
+    "test:sdk:mac": "TEST_PLATFORM=mac vitest run",
+    "test:sdk:linux": "TEST_PLATFORM=linux vitest run",
+    "test:sdk:watch": "vitest",
+    "test:sdk:ui": "vitest --ui",
+    "test:sdk:coverage": "vitest run --coverage",
+    "test:sdk:single": "vitest run --reporter=verbose",
+    "test:sdk:report": "open test-results/index.html",
+    "test:sdk:results": "node scripts/view-test-results.mjs",
     "docs-lint": "cd docs && vale **/*.mdx",
     "docs-upload": "node upload-docs-to-openai.js",
     "runall": "dotenv testdriverai run --config testdriver.config.yaml --path './testdriver/*.testdriver.yaml'",
@@ -34,6 +53,7 @@
     "@oclif/plugin-help": "^6.2.30",
     "@oclif/plugin-not-found": "^3.2.59",
     "@oclif/plugin-warn-if-update-available": "^3.1.43",
+    "@sentry/node": "^9.47.1",
     "@stoplight/yaml-ast-parser": "^0.0.50",
     "ajv": "^8.17.1",
     "arktype": "^2.1.19",
@@ -60,6 +80,7 @@
     "sanitize-filename": "^1.6.3",
     "sharp": "^0.34.4",
     "strip-ansi": "^6.0.1",
+    "terminal-image": "^4.1.0",
     "tmp": "^0.2.3",
     "winston": "^3.18.3",
     "winston-transport": "^4.9.0",
@@ -71,6 +92,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.10.0",
+    "@vitest/ui": "^4.0.15",
     "chai": "^5.1.2",
     "esbuild": "0.20.2",
     "esbuild-plugin-fileloc": "^0.0.6",
@@ -81,7 +103,9 @@
     "mint": "^4.2.67",
     "mocha": "^10.8.2",
     "node-addon-api": "^8.0.0",
-    "prettier": "3.3.3"
+    "prettier": "3.3.3",
+    "testdriverai": "^7.2.3",
+    "vitest": "^4.0.16"
   },
   "optionalDependencies": {
     "@esbuild/linux-x64": "^0.21.5"

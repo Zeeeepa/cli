@@ -168,14 +168,14 @@ Resources:
             IpProtocol: tcp,
             FromPort: 8765,
             ToPort: 8765,
-            CidrIp: 35.171.123.200/32,
+            CidrIp: 74.220.58.0/24,
             Description: "pyautogui-cli WebSockets - Static IP 1",
           }
         - {
             IpProtocol: tcp,
             FromPort: 8765,
             ToPort: 8765,
-            CidrIp: 52.201.199.222/32,
+            CidrIp: 74.220.50.0/24,
             Description: "pyautogui-cli WebSockets - Static IP 2",
           }
         - {

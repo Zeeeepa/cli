@@ -2,12 +2,15 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { randomUUID } = require("crypto");
 const Jimp = require("jimp");
 const { events } = require("../events.js");
 
 const createSystem = (emitter, sandbox, config) => {
   const screenshot = async (options) => {
-    let { base64 } = await sandbox.send({ type: "system.screenshot" });
+    let { base64 } = await sandbox.send({
+      type: "system.screenshot",
+    });
 
     if (!base64) {
       console.error("Failed to take screenshot");
@@ -29,7 +32,7 @@ const createSystem = (emitter, sandbox, config) => {
   let countImages = 0;
   const tmpFilename = () => {
     countImages = countImages + 1;
-    return path.join(os.tmpdir(), `${new Date().getTime() + countImages}.png`);
+    return path.join(os.tmpdir(), `td-${Date.now()}-${randomUUID().slice(0, 8)}-${countImages}.png`);
   };
 
   const captureAndResize = async (scale = 1, silent = false, mouse = false) => {
