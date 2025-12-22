@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TestDriver Demo App - Login & Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 450px;
+            width: 100%;
+            padding: 40px;
+        }
+        
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .logo h1 {
+            color: #667eea;
+            font-size: 32px;
+            margin-bottom: 8px;
+        }
+        
+        .logo p {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            color: #333;
+            font-weight: 500;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        input[type="email"],
+        input[type="password"],
+        input[type="text"] {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin-top: 10px;
+        }
+        
+        .button:hover {
+            transform: translateY(-2px);
+        }
+        
+        .button:active {
+            transform: translateY(0);
+        }
+        
+        .button-secondary {
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+        }
+        
+        .error-message {
+            background: #fee;
+            color: #c33;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .success-message {
+            background: #efe;
+            color: #3c3;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .info-message {
+            background: #eef;
+            color: #33c;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+            margin-right: 8px;
+        }
+        
+        .checkbox-group label {
+            margin: 0;
+            font-weight: normal;
+            font-size: 14px;
+        }
+        
+        .links {
+            text-align: center;
+            margin-top: 20px;
+        }
+        
+        .links a {
+            color: #667eea;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        
+        .links a:hover {
+            text-decoration: underline;
+        }
+        
+        /* Dashboard styles */
+        .dashboard {
+            display: none;
+        }
+        
+        .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .dashboard-header h2 {
+            color: #333;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        
+        .stat-card h3 {
+            font-size: 32px;
+            margin-bottom: 5px;
+        }
+        
+        .stat-card p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .task-list {
+            margin-bottom: 20px;
+        }
+        
+        .task-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .task-item:hover {
+            background: #f0f0f0;
+        }
+        
+        .task-item input[type="checkbox"] {
+            margin-right: 15px;
+            width: 20px;
+            height: 20px;
+        }
+        
+        .task-item.completed {
+            opacity: 0.6;
+        }
+        
+        .task-item.completed span {
+            text-decoration: line-through;
+        }
+        
+        #loginView {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Login View -->
+        <div id="loginView">
+            <div class="logo">
+                <h1>🚀 TestDriver Demo</h1>
+                <p>AI-Powered UI Testing Platform</p>
+            </div>
+            
+            <div id="errorMessage" class="error-message"></div>
+            <div id="successMessage" class="success-message"></div>
+            
+            <div class="info-message">
+                <strong>Test Credentials:</strong><br>
+                Email: demo@testdriver.ai<br>
+                Password: TestPass123!
+            </div>
+            
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="email">Email Address</label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        name="email" 
+                        placeholder="Enter your email"
+                        required
+                    >
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        name="password" 
+                        placeholder="Enter your password"
+                        required
+                    >
+                </div>
+                
+                <div class="checkbox-group">
+                    <input type="checkbox" id="remember" name="remember">
+                    <label for="remember">Remember me for 30 days</label>
+                </div>
+                
+                <button type="submit" class="button" id="loginButton">
+                    Sign In
+                </button>
+                
+                <button type="button" class="button button-secondary" id="registerButton">
+                    Create Account
+                </button>
+            </form>
+            
+            <div class="links">
+                <a href="#" id="forgotPassword">Forgot your password?</a>
+            </div>
+        </div>
+        
+        <!-- Dashboard View -->
+        <div id="dashboardView" class="dashboard">
+            <div class="dashboard-header">
+                <h2>Welcome, <span id="userName">User</span>! 👋</h2>
+                <button class="button button-secondary" id="logoutButton" style="width: auto; padding: 10px 20px;">
+                    Logout
+                </button>
+            </div>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3 id="testCount">47</h3>
+                    <p>Tests Passed</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="bugCount">3</h3>
+                    <p>Bugs Found</p>
+                </div>
+            </div>
+            
+            <h3 style="margin-bottom: 15px; color: #333;">Your Tasks</h3>
+            <div class="task-list" id="taskList">
+                <div class="task-item" data-task-id="1">
+                    <input type="checkbox" id="task1">
+                    <span>Review API test results</span>
+                </div>
+                <div class="task-item" data-task-id="2">
+                    <input type="checkbox" id="task2">
+                    <span>Update dashboard tests</span>
+                </div>
+                <div class="task-item" data-task-id="3">
+                    <input type="checkbox" id="task3">
+                    <span>Fix failing e2e tests</span>
+                </div>
+            </div>
+            
+            <button class="button" id="addTaskButton">
+                Add New Task
+            </button>
+        </div>
+    </div>
+    
+    <script>
+        // Login form handling
+        const loginForm = document.getElementById('loginForm');
+        const errorMessage = document.getElementById('errorMessage');
+        const successMessage = document.getElementById('successMessage');
+        const loginView = document.getElementById('loginView');
+        const dashboardView = document.getElementById('dashboardView');
+        
+        // Valid credentials
+        const VALID_EMAIL = 'demo@testdriver.ai';
+        const VALID_PASSWORD = 'TestPass123!';
+        
+        loginForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            // Clear messages
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+            
+            // Simulate loading
+            const loginButton = document.getElementById('loginButton');
+            loginButton.textContent = 'Signing in...';
+            loginButton.disabled = true;
+            
+            setTimeout(() => {
+                if (email === VALID_EMAIL && password === VALID_PASSWORD) {
+                    successMessage.textContent = '✅ Login successful! Redirecting...';
+                    successMessage.style.display = 'block';
+                    
+                    // Extract name from email
+                    const userName = email.split('@')[0];
+                    document.getElementById('userName').textContent = userName;
+                    
+                    // Switch to dashboard
+                    setTimeout(() => {
+                        loginView.style.display = 'none';
+                        dashboardView.style.display = 'block';
+                    }, 1000);
+                } else {
+                    errorMessage.textContent = '❌ Invalid email or password. Please try again.';
+                    errorMessage.style.display = 'block';
+                    loginButton.textContent = 'Sign In';
+                    loginButton.disabled = false;
+                }
+            }, 1500);
+        });
+        
+        // Register button
+        document.getElementById('registerButton').addEventListener('click', function() {
+            successMessage.textContent = '📝 Registration form would open here...';
+            successMessage.style.display = 'block';
+        });
+        
+        // Forgot password
+        document.getElementById('forgotPassword').addEventListener('click', function(e) {
+            e.preventDefault();
+            successMessage.textContent = '📧 Password reset link sent to your email!';
+            successMessage.style.display = 'block';
+        });
+        
+        // Logout
+        document.getElementById('logoutButton').addEventListener('click', function() {
+            dashboardView.style.display = 'none';
+            loginView.style.display = 'block';
+            
+            // Reset form
+            loginForm.reset();
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+        });
+        
+        // Task checkbox handling
+        document.querySelectorAll('.task-item input[type="checkbox"]').forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                const taskItem = this.closest('.task-item');
+                if (this.checked) {
+                    taskItem.classList.add('completed');
+                    
+                    // Update stats
+                    const testCount = document.getElementById('testCount');
+                    testCount.textContent = parseInt(testCount.textContent) + 1;
+                } else {
+                    taskItem.classList.remove('completed');
+                    
+                    // Update stats
+                    const testCount = document.getElementById('testCount');
+                    testCount.textContent = parseInt(testCount.textContent) - 1;
+                }
+            });
+        });
+        
+        // Add task button
+        document.getElementById('addTaskButton').addEventListener('click', function() {
+            const taskList = document.getElementById('taskList');
+            const newTaskId = taskList.children.length + 1;
+            
+            const newTask = document.createElement('div');
+            newTask.className = 'task-item';
+            newTask.dataset.taskId = newTaskId;
+            newTask.innerHTML = `
+                <input type="checkbox" id="task${newTaskId}">
+                <span>New task ${newTaskId}</span>
+            `;
+            
+            taskList.appendChild(newTask);
+            
+            // Add event listener to new checkbox
+            newTask.querySelector('input[type="checkbox"]').addEventListener('change', function() {
+                const taskItem = this.closest('.task-item');
+                if (this.checked) {
+                    taskItem.classList.add('completed');
+                    const testCount = document.getElementById('testCount');
+                    testCount.textContent = parseInt(testCount.textContent) + 1;
+                } else {
+                    taskItem.classList.remove('completed');
+                    const testCount = document.getElementById('testCount');
+                    testCount.textContent = parseInt(testCount.textContent) - 1;
+                }
+            });
+        });
+    </script>
+</body>
+</html>
+

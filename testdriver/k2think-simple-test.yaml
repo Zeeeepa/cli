@@ -1,0 +1,32 @@
+version: 6.0.0
+# Test: K2Think.ai Login and Chat - Simplified Version
+# This test logs into K2Think.ai and asks the AI about its model
+
+steps:
+  # Step 1: Navigate and verify login page
+  - prompt: Navigate to https://www.k2think.ai/ and verify the login page
+    
+  # Step 2: Enter email address
+  - prompt: Click on the email input field and type developer@pixelium.uk
+  
+  # Step 3: Enter password
+  - prompt: Click on the password input field and type developer123?
+  
+  # Step 4: Click the login button
+  - prompt: Click the login button to sign in
+  
+  # Step 5: Wait for chat interface to load
+  - prompt: Wait for the chat interface to appear after successful login
+  
+  # Step 6: Clear and type message in chat input
+  - prompt: Click on the chat text input area, clear any existing text, and type "hello what model are you"
+  
+  # Step 7: Send the message
+  - prompt: Click the send button or press Enter to send the message
+  
+  # Step 8: Wait for AI response
+  - prompt: Wait for the AI to generate and display its response about the model
+  
+  # Step 9: Verify response received
+  - prompt: Verify that the AI has responded with information about its model
+

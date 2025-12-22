@@ -1,0 +1,138 @@
+version: 6.0.0
+# Test: K2Think.ai Login and Chat Interaction
+# This test demonstrates logging into K2Think.ai and interacting with the AI chatbot
+
+steps:
+  # Step 1: Navigate to K2Think.ai
+  - prompt: Open the K2Think.ai website
+    commands:
+      - command: exec
+        script: |
+          const { chromium } = require('playwright');
+          const browser = await chromium.launch({ headless: false });
+          const page = await browser.newPage();
+          await page.goto('https://www.k2think.ai/');
+          await page.waitForLoadState('networkidle');
+
+  # Step 2: Verify login form is visible
+  - prompt: Wait for and verify the login page is displayed
+    commands:
+      - command: wait-for-text
+        text: Email
+        timeout: 10000
+      - command: assert
+        expect: The login form with Email and Password fields is displayed
+
+  # Step 3: Enter email address
+  - prompt: Enter the email address in the login form
+    commands:
+      - command: hover-text
+        text: Email
+        description: Email input field or label in the login form
+        action: click
+      - command: type
+        text: developer@pixelium.uk
+        delay: 50
+
+  # Step 4: Enter password
+  - prompt: Enter the password in the login form
+    commands:
+      - command: hover-text
+        text: Password
+        description: Password input field or label in the login form
+        action: click
+      - command: type
+        text: developer123?
+        delay: 50
+
+  # Step 5: Click the login button
+  - prompt: Click the login button to submit credentials
+    commands:
+      - command: hover-text
+        text: Login
+        description: Login button in the login form
+        action: click
+
+  # Step 6: Wait for successful login and dashboard to load
+  - prompt: Wait for the chat interface to appear after login
+    commands:
+      - command: wait
+        duration: 3000
+      - command: assert
+        expect: The chat interface or dashboard is displayed after successful login
+
+  # Step 7: Locate the chat input area
+  - prompt: Find the text input area for chat
+    commands:
+      - command: wait-for-text
+        text: Type
+        timeout: 10000
+      - command: hover-text
+        text: Type
+        description: Text input area or textarea for typing messages
+        action: click
+
+  # Step 8: Clear any existing text (if present)
+  - prompt: Clear any existing text in the input field
+    commands:
+      - command: press
+        key: Control
+        modifiers: [a]
+      - command: press
+        key: Backspace
+
+  # Step 9: Type the message to the AI
+  - prompt: Type the question to the AI chatbot
+    commands:
+      - command: type
+        text: hello what model are you
+        delay: 50
+
+  # Step 10: Send the message
+  - prompt: Click the send button or press Enter to send the message
+    commands:
+      - command: hover-text
+        text: Send
+        description: Send button next to the text input area
+        action: click
+
+  # Alternative: Press Enter to send (if Send button doesn't exist)
+  # - command: press
+  #   key: Enter
+
+  # Step 11: Wait for the AI response
+  - prompt: Wait for the AI to respond to the message
+    commands:
+      - command: wait
+        duration: 5000
+      - command: wait-for-text
+        text: GLM
+        timeout: 15000
+
+  # Step 12: Verify response is displayed
+  - prompt: Verify that the AI response is displayed in the chat
+    commands:
+      - command: assert
+        expect: The AI response containing model information is displayed in the chat area
+
+  # Step 13: Capture the response
+  - prompt: Capture and print the AI response
+    commands:
+      - command: exec-js
+        script: |
+          // Find the most recent chat message (AI response)
+          const messages = document.querySelectorAll('.message, .chat-message, [class*="message"]');
+          const lastMessage = messages[messages.length - 1];
+          const responseText = lastMessage ? lastMessage.innerText : 'Response not found';
+          console.log('AI Response:', responseText);
+          return responseText;
+      - command: remember
+        key: ai_response
+        value: "{{exec_result}}"
+
+  # Step 14: Final assertion
+  - prompt: Verify the test completed successfully
+    commands:
+      - command: assert
+        expect: The AI responded with model information and the response was captured successfully
+
