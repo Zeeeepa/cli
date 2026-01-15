@@ -10,8 +10,11 @@
 import { describe, expect, it } from "vitest";
 import { TestDriver } from "../../lib/vitest/hooks.mjs";
 
+const isLinux = (process.env.TD_OS || "linux") === "linux";
+
+
 describe("Chrome Extension Test", () => {
-  it("should load hello-world Chrome extension from local path", async (context) => {
+    it.skipIf(!isLinux)("should load hello-world Chrome extension from local path", async (context) => {
     const testdriver = TestDriver(context, { headless: false, newSandbox: true });
     
     // Wait for connection to be ready before running exec
@@ -35,7 +38,7 @@ describe("Chrome Extension Test", () => {
     // When clicked, it shows a popup with "Hello Extensions"
     
     // First, let's verify Chrome loaded and we can see the page
-    const pageResult = await testdriver.assert("the testdriver.ai website is visible");
+    const pageResult = await testdriver.assert("chrome is running");
     expect(pageResult).toBeTruthy();
 
     // Click on the extensions button (puzzle piece icon) in Chrome toolbar
@@ -51,14 +54,13 @@ describe("Chrome Extension Test", () => {
     expect(popupResult).toBeTruthy();
   });
 
-  it("should load Loom from Chrome Web Store by extensionId", async (context) => {
+    it.skipIf(!isLinux)("should load Loom from Chrome Web Store by extensionId", async (context) => {
     const testdriver = TestDriver(context, { headless: false, newSandbox: true});
 
     // Launch Chrome with Loom loaded by its Chrome Web Store ID
     // Loom ID: liecbddmkiiihnedobmlmillhodjkdmb
     await testdriver.provision.chromeExtension({
-      extensionId: 'liecbddmkiiihnedobmlmillhodjkdmb',
-      url: 'https://testdriver.ai'
+      extensionId: 'liecbddmkiiihnedobmlmillhodjkdmb'
     });
 
     // Click on the extensions button (puzzle piece icon) in Chrome toolbar

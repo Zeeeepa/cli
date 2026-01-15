@@ -356,8 +356,9 @@ const createCommands = (
       );
       
       // Wait for redraw and track duration
+      // Increase timeout for scroll operations as they can take 1-2 seconds to complete
       const redrawStartTime = Date.now();
-      await redraw.wait(2500, redrawOptions);
+      await redraw.wait(5000, redrawOptions);
       const redrawDuration = Date.now() - redrawStartTime;
       
       const after = await system.captureScreenBase64();
@@ -719,47 +720,44 @@ const createCommands = (
     hover: hover,
     /**
      * Hover over text on screen
-     * @param {Object|string} options - Options object or text (for backward compatibility)
-     * @param {string} options.text - Text to find and hover over
-     * @param {string|null} [options.description] - Optional description of the element
+     * @param {Object|string} options - Options object or description (for backward compatibility)
+     * @param {string} options.description - Description of the element to find
      * @param {string} [options.action='click'] - Action to perform
      * @param {number} [options.timeout=5000] - Timeout in milliseconds
      */
     "hover-text": async (...args) => {
-      let text, description, action, timeout;
+      let description, text, action, timeout;
       
       // Handle both object and positional argument styles
-      if (isObjectArgs(args, ['text', 'description', 'action', 'timeout'])) {
-        ({ text, description = null, action = 'click', timeout = 5000 } = args[0]);
+      if (isObjectArgs(args, ['description', 'text', 'action', 'timeout'])) {
+        ({ description, text, action = 'click', timeout = 5000 } = args[0]);
       } else {
-        // Legacy positional: hoverText(text, description, action, timeout)
-        [text, description = null, action = 'click', timeout = 5000] = args;
+        // Legacy positional: hoverText(description, action, timeout)
+        [description, action = 'click', timeout = 5000] = args;
       }
+      
+      // Use text if provided, otherwise fall back to description
+      // This handles both the new spec (text + description) and legacy usage (just description)
+      description = text || description;
+      
+      if (!description) {
+        throw new CommandError("hover-text requires either a text or description parameter");
+      }
+      
+      description = description.toString();
       
       emitter.emit(
         events.log.narration,
-        theme.dim(
-          `searching for "${text}"${description ? ` (${description})` : ""}...`,
-        ),
+        theme.dim(`searching for "${description}"...`),
       );
 
-      text = text ? text.toString() : null;
-
       // wait for the text to appear on screen
-      await commands["wait-for-text"]({ text, timeout });
-
-      description = description ? description.toString() : null;
+      await commands["wait-for-text"]({ text: description, timeout });
 
       emitter.emit(events.log.narration, theme.dim("thinking..."), true);
 
-      // Combine text and description into element parameter
-      let element = text;
-      if (description) {
-        element = `"${text}" with description ${description}`;
-      }
-
       let response = await sdk.req("find", {
-        element,
+        element: description,
         image: await system.captureScreenBase64(),
       });
 

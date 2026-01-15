@@ -1,13 +1,10 @@
-/**
- * TestDriver SDK - Launch VS Code on Linux Test (Vitest)
- * Tests launching Visual Studio Code on Debian/Ubuntu using provision.vscode()
- */
-
 import { describe, expect, it } from "vitest";
 import { TestDriver } from "../../lib/vitest/hooks.mjs";
 
+const isLinux = (process.env.TD_OS || "linux") === "linux";
+
 describe("Launch VS Code on Linux", () => {
-  it(
+  it.skipIf(!isLinux)(
     "should launch VS Code on Debian/Ubuntu",
     async (context) => {
       const testdriver = TestDriver(context, { newSandbox: true });
@@ -15,15 +12,16 @@ describe("Launch VS Code on Linux", () => {
       // provision.vscode() automatically calls ready() and starts dashcam
       await testdriver.provision.vscode();
 
-      // Assert that VS Code is running
-      const result = await testdriver.assert(
-        "Visual Studio Code window is visible on screen",
+      // Wait for VS Code to launch (polls every 5s until found or timeout)
+      const vsCodeWindow = await testdriver.find(
+        "Visual Studio Code window",
+        { timeout: 60000 }
       );
-      expect(result).toBeTruthy();
+      expect(vsCodeWindow.found()).toBeTruthy();
     },
   );
 
-  it(
+  it.skipIf(!isLinux)(
     "should install and use a VS Code extension",
     async (context) => {
       const testdriver = TestDriver(context, { newSandbox: true });
@@ -33,11 +31,12 @@ describe("Launch VS Code on Linux", () => {
         extensions: ["esbenp.prettier-vscode"],
       });
 
-      // Assert that VS Code is running
-      const vsCodeVisible = await testdriver.assert(
-        "Visual Studio Code window is visible on screen",
+      const vsCodeWindow = await testdriver.find(
+        "Visual Studio Code window",
+        { timeout: 60000 }
       );
-      expect(vsCodeVisible).toBeTruthy();
+
+      expect(vsCodeWindow.found()).toBeTruthy();
 
       // Open the extensions panel to verify Prettier is installed
       await testdriver.pressKeys(["ctrl", "shift", "x"]);

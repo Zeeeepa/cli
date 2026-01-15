@@ -3,9 +3,45 @@ import crypto from "crypto";
 import { createRequire } from "module";
 import path from "path";
 import { setTestRunInfo } from "./shared-test-state.mjs";
+import { generateGitHubComment, postOrUpdateTestResults } from "../lib/github-comment.mjs";
 
 // Use createRequire to import CommonJS modules without esbuild processing
 const require = createRequire(import.meta.url);
+
+/**
+ * Minimum required Vitest major version
+ */
+const MINIMUM_VITEST_VERSION = 4;
+
+/**
+ * Check that Vitest version meets minimum requirements
+ * @throws {Error} if Vitest version is below minimum or not installed
+ */
+function checkVitestVersion() {
+  try {
+    const vitestPkg = require('vitest/package.json');
+    const version = vitestPkg.version;
+    const major = parseInt(version.split('.')[0], 10);
+    
+    if (major < MINIMUM_VITEST_VERSION) {
+      throw new Error(
+        `TestDriver requires Vitest >= ${MINIMUM_VITEST_VERSION}.0.0, but found ${version}. ` +
+        `Please upgrade Vitest: npm install vitest@latest`
+      );
+    }
+  } catch (err) {
+    if (err.code === 'MODULE_NOT_FOUND') {
+      throw new Error(
+        'TestDriver requires Vitest to be installed. ' +
+        'Please install it: npm install vitest@latest'
+      );
+    }
+    throw err;
+  }
+}
+
+// Check Vitest version at plugin load time
+checkVitestVersion();
 
 /**
  * Simple logger for the vitest plugin
@@ -97,6 +133,7 @@ export const pluginState = {
   client: null,
   startTime: null,
   testCases: new Map(),
+  recordedTestCases: [], // Store recorded test case data for GitHub comment
   token: null,
   detectedPlatform: null,
   pendingTestCaseRecords: new Set(),
@@ -623,6 +660,9 @@ class TestDriverReporter {
         logger.debug(`🔗 View test run: ${testRunUrl}`);
         // Output in a parseable format for CI
         console.log(`TESTDRIVER_RUN_URL=${testRunUrl}`);
+        
+        // Post GitHub comment if in CI environment
+        await postGitHubCommentIfEnabled(testRunUrl, stats, completeData);
       }
 
       logger.debug(`✅ Test run completed: ${stats.passedTests}/${stats.totalTests} passed`);
@@ -757,6 +797,12 @@ class TestDriverReporter {
 
       const testCaseDbId = testCaseResponse.data?.id;
       const testRunDbId = process.env.TD_TEST_RUN_DB_ID;
+
+      // Store test case data for GitHub comment generation
+      pluginState.recordedTestCases.push({
+        ...testCaseData,
+        id: testCaseDbId,
+      });
 
       console.log('');
       console.log(`🔗 Test Report: ${getConsoleUrl(pluginState.apiRoot)}/runs/${testRunDbId}/${testCaseDbId}`);
@@ -940,6 +986,95 @@ function getGitInfo() {
 
   logger.debug("Collected git info:", info);
   return info;
+}
+
+// ============================================================================
+// GitHub Comment Helper
+// ============================================================================
+
+/**
+ * Post GitHub comment with test results if enabled
+ * Checks for GitHub token and PR number in environment variables
+ * @param {string} testRunUrl - URL to the test run
+ * @param {Object} stats - Test statistics
+ * @param {Object} completeData - Test run completion data
+ */
+async function postGitHubCommentIfEnabled(testRunUrl, stats, completeData) {
+  try {
+    // Check if GitHub comments are explicitly disabled
+    if (process.env.TESTDRIVER_SKIP_GITHUB_COMMENT === 'true') {
+      logger.debug('GitHub comments disabled via TESTDRIVER_SKIP_GITHUB_COMMENT');
+      return;
+    }
+    
+    // Check if GitHub comment posting is enabled
+    const githubToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+    const prNumber = process.env.GITHUB_PR_NUMBER;
+    const commitSha = process.env.GITHUB_SHA || pluginState.gitInfo.commit;
+    
+    // Only post if we have a token and either a PR number or commit SHA
+    if (!githubToken) {
+      logger.debug('GitHub token not found, skipping comment posting');
+      return;
+    }
+    
+    if (!prNumber && !commitSha) {
+      logger.debug('Neither PR number nor commit SHA found, skipping comment posting');
+      return;
+    }
+    
+    // Extract owner/repo from git info
+    const repo = pluginState.gitInfo.repo;
+    if (!repo) {
+      logger.warn('Repository info not available, skipping GitHub comment');
+      return;
+    }
+    
+    const [owner, repoName] = repo.split('/');
+    if (!owner || !repoName) {
+      logger.warn('Invalid repository format, expected owner/repo');
+      return;
+    }
+    
+    logger.debug('Preparing GitHub comment...');
+    
+    // Prepare test run data for comment
+    const testRunData = {
+      runId: pluginState.testRunId,
+      status: completeData.status,
+      totalTests: stats.totalTests,
+      passedTests: stats.passedTests,
+      failedTests: stats.failedTests,
+      skippedTests: stats.skippedTests,
+      duration: completeData.duration,
+      testRunUrl,
+      platform: completeData.platform || pluginState.detectedPlatform || 'unknown',
+      branch: pluginState.gitInfo.branch || 'unknown',
+      commit: commitSha || 'unknown',
+    };
+    
+    // Use recorded test cases from pluginState
+    const testCases = pluginState.recordedTestCases || [];
+    
+    logger.info(`Posting GitHub comment with ${testCases.length} test cases...`);
+    
+    // Post or update GitHub comment
+    const githubOptions = {
+      token: githubToken,
+      owner,
+      repo: repoName,
+      prNumber: prNumber ? parseInt(prNumber, 10) : undefined,
+      commitSha: commitSha,
+    };
+    
+    const comment = await postOrUpdateTestResults(testRunData, testCases, githubOptions);
+    logger.info(`✅ GitHub comment posted: ${comment.html_url}`);
+    console.log(`\n🔗 GitHub Comment: ${comment.html_url}\n`);
+    
+  } catch (error) {
+    logger.warn('Failed to post GitHub comment:', error.message);
+    logger.debug('GitHub comment error stack:', error.stack);
+  }
 }
 
 // ============================================================================

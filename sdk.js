@@ -264,10 +264,10 @@ class ElementNotFoundError extends Error {
 }
 
 /**
- * Custom error class for act() failures
+ * Custom error class for ai() failures
  * Includes task execution details and retry information
  */
-class ActError extends Error {
+class AIError extends Error {
   /**
    * @param {string} message - Error message
    * @param {Object} details - Additional details about the failure
@@ -279,7 +279,7 @@ class ActError extends Error {
    */
   constructor(message, details = {}) {
     super(message);
-    this.name = "ActError";
+    this.name = "AIError";
     this.task = details.task;
     this.tries = details.tries;
     this.maxTries = details.maxTries;
@@ -289,11 +289,11 @@ class ActError extends Error {
 
     // Capture stack trace
     if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, ActError);
+      Error.captureStackTrace(this, AIError);
     }
 
     // Enhance error message with execution details
-    this.message += `\n\n=== Act Execution Details ===`;
+    this.message += `\n\n=== AI Execution Details ===`;
     this.message += `\nTask: "${this.task}"`;
     this.message += `\nTries: ${this.tries}/${this.maxTries}`;
     this.message += `\nDuration: ${this.duration}ms`;
@@ -372,10 +372,17 @@ class Element {
   /**
    * Find the element on screen
    * @param {string} [newDescription] - Optional new description to search for
-   * @param {Object} [options] - Optional options object with cacheThreshold and/or cacheKey
+   * @param {Object} [options] - Optional options object with cacheThreshold, cacheKey, and/or timeout
+   * @param {number} [options.timeout] - Max time in ms to poll for element (polls every 5 seconds)
    * @returns {Promise<Element>} This element instance
    */
   async find(newDescription, options) {
+    // Handle timeout/polling option
+    const timeout = typeof options === 'object' ? options?.timeout : null;
+    if (timeout && timeout > 0) {
+      return this._findWithTimeout(newDescription, options, timeout);
+    }
+
     const description = newDescription || this.description;
     if (newDescription) {
       this.description = newDescription;
@@ -523,6 +530,61 @@ class Element {
       });
     }
 
+    return this;
+  }
+
+  /**
+   * Find element with polling/timeout support
+   * @private
+   * @param {string} [newDescription] - Optional new description to search for
+   * @param {Object} options - Options object
+   * @param {number} timeout - Max time in ms to poll for element
+   * @returns {Promise<Element>} This element instance
+   */
+  async _findWithTimeout(newDescription, options, timeout) {
+    const POLL_INTERVAL = 5000; // 5 seconds between attempts
+    const startTime = Date.now();
+    const description = newDescription || this.description;
+    
+    // Log that we're starting a polling find
+    const { events } = require("./agent/events.js");
+    this.sdk.emitter.emit(events.log.log, `🔄 Polling for "${description}" (timeout: ${timeout}ms)`);
+    
+    // Create options without timeout to avoid infinite recursion
+    const findOptions = typeof options === 'object' ? { ...options } : {};
+    delete findOptions.timeout;
+    
+    let attempts = 0;
+    while (Date.now() - startTime < timeout) {
+      attempts++;
+      
+      // Call the regular find (without timeout option)
+      await this.find(newDescription, findOptions);
+      
+      if (this._found) {
+        this.sdk.emitter.emit(events.log.log, `✅ Found "${description}" after ${attempts} attempt(s)`);
+        return this;
+      }
+      
+      const elapsed = Date.now() - startTime;
+      const remaining = timeout - elapsed;
+      
+      if (remaining > POLL_INTERVAL) {
+        this.sdk.emitter.emit(events.log.log, `⏳ Element not found, retrying in 5s... (${Math.round(remaining / 1000)}s remaining)`);
+        await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
+      } else if (remaining > 0) {
+        // Less than 5s remaining, wait the remaining time and try once more
+        await new Promise(resolve => setTimeout(resolve, remaining));
+      }
+    }
+    
+    // Final attempt after timeout
+    await this.find(newDescription, findOptions);
+    
+    if (!this._found) {
+      this.sdk.emitter.emit(events.log.log, `❌ Element "${description}" not found after ${timeout}ms (${attempts} attempts)`);
+    }
+    
     return this;
   }
 
@@ -1183,6 +1245,9 @@ class TestDriverSDK {
     this.sandboxAmi = options.sandboxAmi || null;
     this.sandboxInstance = options.sandboxInstance || null;
 
+    // Store reconnect preference from options
+    this.reconnect = options.reconnect !== undefined ? options.reconnect : false;
+
     // Cache threshold configuration
     // threshold = pixel difference allowed (0.05 = 5% difference, 95% similarity)
     // By default, cache is DISABLED (threshold = -1) to avoid unnecessary AI costs
@@ -1332,7 +1397,7 @@ class TestDriverSDK {
             ? `New-Item -ItemType File -Path "${logPath}" -Force | Out-Null`
             : `touch ${logPath}`;
             
-            await this.exec(shell, createLogCmd, 10000, true);
+            await this.exec(shell, createLogCmd, 60000, true);
           
             const urlObj = new URL(url);
             const domain = urlObj.hostname;
@@ -1363,7 +1428,7 @@ class TestDriverSDK {
           ? `New-Item -ItemType Directory -Path "${defaultProfileDir}" -Force | Out-Null`
           : `mkdir -p "${defaultProfileDir}"`;
         
-        await this.exec(shell, createDirCmd, 10000, true);
+        await this.exec(shell, createDirCmd, 60000, true);
         
         // Write Chrome preferences
         const chromePrefs = {
@@ -1400,7 +1465,7 @@ class TestDriverSDK {
           ? `[System.IO.File]::WriteAllText("${prefsPath}", '${JSON.stringify(chromePrefs).replace(/'/g, "''")}')`
           : `cat > "${prefsPath}" << 'EOF'\n${prefsJson}\nEOF`;
         
-        await this.exec(shell, writePrefCmd, 10000, true);
+        await this.exec(shell, writePrefCmd, 60000, true);
 
         // Build Chrome launch command
         const chromeArgs = [];
@@ -1460,22 +1525,19 @@ class TestDriverSDK {
        * @param {Object} options - Chrome extension launch options
        * @param {string} [options.extensionPath] - Local filesystem path to the unpacked extension directory
        * @param {string} [options.extensionId] - Chrome Web Store extension ID (e.g., "cjpalhdlnbpafiamejdnhcphjbkeiagm" for uBlock Origin)
-       * @param {string} [options.url='http://testdriver-sandbox.vercel.app/'] - URL to navigate to
        * @param {boolean} [options.maximized=true] - Start maximized
        * @returns {Promise<void>}
        * @example
        * // Load extension from local path
        * await testdriver.exec('sh', 'git clone https://github.com/user/extension.git /tmp/extension');
        * await testdriver.provision.chromeExtension({
-       *   extensionPath: '/tmp/extension',
-       *   url: 'https://example.com'
+       *   extensionPath: '/tmp/extension'
        * });
        * 
        * @example
        * // Load extension by Chrome Web Store ID
        * await testdriver.provision.chromeExtension({
-       *   extensionId: 'cjpalhdlnbpafiamejdnhcphjbkeiagm', // uBlock Origin
-       *   url: 'https://example.com'
+       *   extensionId: 'cjpalhdlnbpafiamejdnhcphjbkeiagm' // uBlock Origin
        * });
        */
       chromeExtension: async (options = {}) => {
@@ -1485,7 +1547,6 @@ class TestDriverSDK {
         const {
           extensionPath: providedExtensionPath,
           extensionId,
-          url = 'http://testdriver-sandbox.vercel.app/',
           maximized = true,
         } = options;
 
@@ -1508,7 +1569,7 @@ class TestDriverSDK {
           const mkdirCmd = this.os === 'windows'
             ? `New-Item -ItemType Directory -Path "${extensionDir}" -Force | Out-Null`
             : `mkdir -p "${extensionDir}"`;
-          await this.exec(shell, mkdirCmd, 10000, true);
+          await this.exec(shell, mkdirCmd, 60000, true);
           
           // Download CRX from Chrome Web Store
           // The CRX download URL format for Chrome Web Store
@@ -1603,7 +1664,7 @@ with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
           console.log(`[provision.chromeExtension] Extension ${extensionId} extracted to ${extensionPath}`);
         }
 
-        // If dashcam is available and recording, add web logs for this domain
+        // If dashcam is available, set up file logging
         if (this._dashcam) {
           // Create the log file on the remote machine
           const logPath = this.os === "windows" 
@@ -1614,12 +1675,7 @@ with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
             ? `New-Item -ItemType File -Path "${logPath}" -Force | Out-Null`
             : `touch ${logPath}`;
           
-          await this.exec(shell, createLogCmd, 10000, true);
-        
-          const urlObj = new URL(url);
-          const domain = urlObj.hostname;
-          const pattern = `*${domain}*`;
-          await this._dashcam.addWebLog(pattern, 'Web Logs');
+          await this.exec(shell, createLogCmd, 60000, true);
           await this._dashcam.addFileLog(logPath, "TestDriver Log");
         }
         
@@ -1642,7 +1698,7 @@ with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
           ? `New-Item -ItemType Directory -Path "${defaultProfileDir}" -Force | Out-Null`
           : `mkdir -p "${defaultProfileDir}"`;
         
-        await this.exec(shell, createDirCmd, 10000, true);
+        await this.exec(shell, createDirCmd, 60000, true);
         
         // Write Chrome preferences
         const chromePrefs = {
@@ -1679,7 +1735,7 @@ with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
           ? `[System.IO.File]::WriteAllText("${prefsPath}", '${JSON.stringify(chromePrefs).replace(/'/g, "''")}')`
           : `cat > "${prefsPath}" << 'EOF'\n${prefsJson}\nEOF`;
         
-        await this.exec(shell, writePrefCmd, 10000, true);
+        await this.exec(shell, writePrefCmd, 60000, true);
 
         // Build Chrome launch command
         const chromeArgs = [];
@@ -1695,19 +1751,19 @@ with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
           chromeArgs.push(`--load-extension=${extensionPath}`);
         }
 
-        // Launch Chrome
+        // Launch Chrome (opens to New Tab by default)
         if (this.os === 'windows') {
           const argsString = chromeArgs.map(arg => `"${arg}"`).join(', ');
           await this.exec(
             shell,
-            `Start-Process "C:/Program Files/Google/Chrome/Application/chrome.exe" -ArgumentList ${argsString}, "${url}"`,
+            `Start-Process "C:/Program Files/Google/Chrome/Application/chrome.exe" -ArgumentList ${argsString}`,
             30000
           );
         } else {
           const argsString = chromeArgs.join(' ');
           await this.exec(
             shell,
-            `chrome-for-testing ${argsString} "${url}" >/dev/null 2>&1 &`,
+            `chrome-for-testing ${argsString} >/dev/null 2>&1 &`,
             30000
           );
         }
@@ -1715,25 +1771,18 @@ with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
         // Wait for Chrome to be ready
         await this.focusApplication('Google Chrome');
 
-        // Wait for URL to load
-        try {
-          const urlObj = new URL(url);
-          const domain = urlObj.hostname;
-                    
-          for (let attempt = 0; attempt < 30; attempt++) {
-            const result = await this.find(`${domain}`);
+        // Wait for New Tab to appear
+        for (let attempt = 0; attempt < 30; attempt++) {
+          const result = await this.find('New Tab');
 
-            if (result.found()) {
-              break;
-            } else {
-              await new Promise(resolve => setTimeout(resolve, 1000));
-            }
+          if (result.found()) {
+            break;
+          } else {
+            await new Promise(resolve => setTimeout(resolve, 1000));
           }
-          
-          await this.focusApplication('Google Chrome');
-        } catch (e) {
-          console.warn(`[provision.chromeExtension] ⚠️  Could not parse URL "${url}":`, e.message);
         }
+        
+        await this.focusApplication('Google Chrome');
       },
 
       /**
@@ -1765,7 +1814,7 @@ with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
             ? `New-Item -ItemType File -Path "${logPath}" -Force | Out-Null`
             : `touch ${logPath}`;
           
-          await this.exec(shell, createLogCmd, 10000, true);
+          await this.exec(shell, createLogCmd, 60000, true);
           await this._dashcam.addFileLog(logPath, "TestDriver Log");
         }
         
@@ -1860,7 +1909,7 @@ with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
             ? `New-Item -ItemType File -Path "${logPath}" -Force | Out-Null`
             : `touch ${logPath}`;
           
-          await this.exec(shell, createLogCmd, 10000, true);
+          await this.exec(shell, createLogCmd, 60000, true);
           await this._dashcam.addFileLog(logPath, "TestDriver Log");
         }
         
@@ -1869,64 +1918,107 @@ with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
           await this.dashcam.start();
         }
 
-        // Determine filename from URL if not provided
-        const urlObj = new URL(url);
-        const detectedFilename = filename || urlObj.pathname.split('/').pop() || 'installer';
-        
-        // Determine download directory and full path
+        // Determine download directory
         const downloadDir = this.os === 'windows' 
           ? 'C:\\Users\\testdriver\\Downloads'
           : '/tmp';
-        const filePath = this.os === 'windows'
-          ? `${downloadDir}\\${detectedFilename}`
-          : `${downloadDir}/${detectedFilename}`;
 
         console.log(`[provision.installer] Downloading ${url}...`);
 
-        // Download the file
+        let actualFilePath;
+
+        // Download the file and get the actual filename (handles redirects)
         if (this.os === 'windows') {
-          await this.exec(
-            shell,
-            `Invoke-WebRequest -Uri "${url}" -OutFile "${filePath}"`,
-            300000, // 5 min timeout for download
-            true
-          );
+          // Simple approach: download first, then get the actual filename from the response
+          const tempFile = `${downloadDir}\\installer_temp_${Date.now()}`;
+          
+          const downloadScript = `
+            $ProgressPreference = 'SilentlyContinue'
+            $response = Invoke-WebRequest -Uri "${url}" -OutFile "${tempFile}" -PassThru -UseBasicParsing
+            
+            # Try to get filename from Content-Disposition header
+            $filename = $null
+            if ($response.Headers['Content-Disposition']) {
+              if ($response.Headers['Content-Disposition'] -match 'filename=\\"?([^\\"]+)\\"?') {
+                $filename = $matches[1]
+              }
+            }
+            
+            # If no filename from header, try to get from URL or use default
+            if (-not $filename) {
+              $uri = [System.Uri]"${url}"
+              $filename = [System.IO.Path]::GetFileName($uri.LocalPath)
+              if (-not $filename -or $filename -eq '') {
+                $filename = "installer"
+              }
+            }
+            
+            # Move temp file to final location with proper filename
+            $finalPath = Join-Path "${downloadDir}" $filename
+            Move-Item -Path "${tempFile}" -Destination $finalPath -Force
+            Write-Output $finalPath
+          `;
+          
+          const result = await this.exec(shell, downloadScript, 300000, true);
+          actualFilePath = result ? result.trim() : null;
+          
+          if (!actualFilePath) {
+            throw new Error('[provision.installer] Failed to download file');
+          }
         } else {
-          await this.exec(
-            shell,
-            `curl -L -o "${filePath}" "${url}"`,
-            300000,
-            true
-          );
+          // Use curl with options to get the final filename
+          const tempMarker = `installer_${Date.now()}`;
+          const downloadScript = `
+            cd "${downloadDir}"
+            curl -L -J -O -w "%{filename_effective}" "${url}" 2>/dev/null || echo "${tempMarker}"
+          `;
+          
+          const result = await this.exec(shell, downloadScript, 300000, true);
+          const downloadedFile = result ? result.trim() : null;
+          
+          if (downloadedFile && downloadedFile !== tempMarker) {
+            actualFilePath = `${downloadDir}/${downloadedFile}`;
+          } else {
+            // Fallback: use curl without -J and specify output file
+            const fallbackFilename = filename || 'installer';
+            actualFilePath = `${downloadDir}/${fallbackFilename}`;
+            await this.exec(
+              shell,
+              `curl -L -o "${actualFilePath}" "${url}"`,
+              300000,
+              true
+            );
+          }
         }
 
-        console.log(`[provision.installer] ✅ Downloaded to ${filePath}`);
+        console.log(`[provision.installer] ✅ Downloaded to ${actualFilePath}`);
 
-        // Auto-detect install command based on file extension
-        const ext = detectedFilename.split('.').pop()?.toLowerCase();
+        // Auto-detect install command based on file extension (use actualFilePath for extension detection)
+        const actualFilename = actualFilePath.split(/[/\\]/).pop() || '';
+        const ext = actualFilename.split('.').pop()?.toLowerCase();
         let installCommand = null;
         
         if (this.os === 'windows') {
           if (ext === 'msi') {
-            installCommand = `Start-Process msiexec -ArgumentList '/i', '"${filePath}"', '/quiet', '/norestart' -Wait`;
+            installCommand = `Start-Process msiexec -ArgumentList '/i', '"${actualFilePath}"', '/quiet', '/norestart' -Wait`;
           } else if (ext === 'exe') {
-            installCommand = `Start-Process "${filePath}" -ArgumentList '/S' -Wait`;
+            installCommand = `Start-Process "${actualFilePath}" -ArgumentList '/S' -Wait`;
           }
         } else if (this.os === 'linux') {
           if (ext === 'deb') {
-            installCommand = `sudo dpkg -i "${filePath}" && sudo apt-get install -f -y`;
+            installCommand = `sudo dpkg -i "${actualFilePath}" && sudo apt-get install -f -y`;
           } else if (ext === 'rpm') {
-            installCommand = `sudo rpm -i "${filePath}"`;
+            installCommand = `sudo rpm -i "${actualFilePath}"`;
           } else if (ext === 'appimage') {
-            installCommand = `chmod +x "${filePath}"`;
+            installCommand = `chmod +x "${actualFilePath}"`;
           } else if (ext === 'sh') {
-            installCommand = `chmod +x "${filePath}" && "${filePath}"`;
+            installCommand = `chmod +x "${actualFilePath}" && "${actualFilePath}"`;
           }
         } else if (this.os === 'darwin') {
           if (ext === 'dmg') {
-            installCommand = `hdiutil attach "${filePath}" -mountpoint /Volumes/installer && cp -R /Volumes/installer/*.app /Applications/ && hdiutil detach /Volumes/installer`;
+            installCommand = `hdiutil attach "${actualFilePath}" -mountpoint /Volumes/installer && cp -R /Volumes/installer/*.app /Applications/ && hdiutil detach /Volumes/installer`;
           } else if (ext === 'pkg') {
-            installCommand = `sudo installer -pkg "${filePath}" -target /`;
+            installCommand = `sudo installer -pkg "${actualFilePath}" -target /`;
           }
         }
 
@@ -1942,7 +2034,7 @@ with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
           await this.focusApplication(appName);
         }
 
-        return filePath;
+        return actualFilePath;
       },
 
       /**
@@ -2039,6 +2131,29 @@ with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
           : this.newSandbox,
     };
 
+    // Handle reconnect option - use last sandbox file
+    // Check both connectOptions and constructor options
+    const shouldReconnect = connectOptions.reconnect !== undefined 
+      ? connectOptions.reconnect 
+      : this.reconnect;
+    
+    if (shouldReconnect) {
+      const lastSandbox = this.agent.getLastSandboxId();
+      if (!lastSandbox || !lastSandbox.sandboxId) {
+        throw new Error(
+          "Cannot reconnect: No previous sandbox found. Run a test first to create a sandbox, or remove the reconnect option."
+        );
+      }
+      this.agent.sandboxId = lastSandbox.sandboxId;
+      buildEnvOptions.new = false;
+      
+      // Use OS from last sandbox if not explicitly specified
+      if (!connectOptions.os && lastSandbox.os) {
+        this.agent.sandboxOs = lastSandbox.os;
+        this.os = lastSandbox.os;
+      }
+    }
+
     // Set agent properties for buildEnv to use
     if (connectOptions.sandboxId) {
       this.agent.sandboxId = connectOptions.sandboxId;
@@ -2067,6 +2182,10 @@ with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
       this.os = connectOptions.os; // Update this.os to match
     } else {
       this.agent.sandboxOs = this.os;
+    }
+    // Use keepAlive from connectOptions if provided
+    if (connectOptions.keepAlive !== undefined) {
+      this.agent.keepAlive = connectOptions.keepAlive;
     }
 
     // Set redrawThreshold on agent's cliArgs.options
@@ -2148,6 +2267,14 @@ with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
    */
   getSessionId() {
     return this.session?.get() || null;
+  }
+
+  /**
+   * Get the last sandbox info from the stored file
+   * @returns {Object|null} Last sandbox info including sandboxId, os, ami, instanceType, timestamp, or null if not found
+   */
+  getLastSandboxId() {
+    return this.agent.getLastSandboxId();
   }
 
   // ====================================
@@ -3117,7 +3244,7 @@ with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
    * @param {Object} [options] - Execution options
    * @param {number} [options.tries=7] - Maximum number of check/retry attempts before giving up
    * @returns {Promise<ActResult>} Result object with success status and details
-   * @throws {ActError} When the task fails after all tries are exhausted
+   * @throws {AIError} When the task fails after all tries are exhausted
    *
    * @typedef {Object} ActResult
    * @property {boolean} success - Whether the task completed successfully
@@ -3163,8 +3290,8 @@ with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
     const originalCheckCount = this.agent.checkCount;
     this.agent.checkCount = 0;
 
-    // Emit scoped start marker for act()
-    this.emitter.emit(events.log.log, formatter.formatActStart(task));
+    // Emit scoped start marker for ai()
+    this.emitter.emit(events.log.log, formatter.formatAIStart(task));
 
     try {
       // Use the agent's exploratoryLoop method directly
@@ -3173,7 +3300,7 @@ with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
       const duration = Date.now() - startTime;
       const triesUsed = this.agent.checkCount;
       
-      this.emitter.emit(events.log.log, formatter.formatActComplete(duration, true));
+      this.emitter.emit(events.log.log, formatter.formatAIComplete(duration, true));
       
       // Restore original checkLimit
       this.agent.checkLimit = originalCheckLimit;
@@ -3191,14 +3318,14 @@ with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
       const duration = Date.now() - startTime;
       const triesUsed = this.agent.checkCount;
       
-      this.emitter.emit(events.log.log, formatter.formatActComplete(duration, false, error.message));
+      this.emitter.emit(events.log.log, formatter.formatAIComplete(duration, false, error.message));
       
       // Restore original checkLimit
       this.agent.checkLimit = originalCheckLimit;
       this.agent.checkCount = originalCheckCount;
       
-      // Create an enhanced error with additional context using ActError class
-      throw new ActError(`Act failed: ${error.message}`, {
+      // Create an enhanced error with additional context using AIError class
+      throw new AIError(`AI failed: ${error.message}`, {
         task,
         tries: triesUsed,
         maxTries: tries,
@@ -3225,4 +3352,4 @@ with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
 module.exports = TestDriverSDK;
 module.exports.Element = Element;
 module.exports.ElementNotFoundError = ElementNotFoundError;
-module.exports.ActError = ActError;
+module.exports.AIError = AIError;

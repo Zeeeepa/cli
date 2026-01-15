@@ -109,13 +109,12 @@ commands:
           break;
         case "hover-text":
           emitter.emit(events.log.log, generator.jsonToManual(object));
-          response = await commands["hover-text"](
-            object.text,
-            object.description,
-            object.action,
-            object.method,
-            object.timeout,
-          );
+          response = await commands["hover-text"]({
+            text: object.text,
+            description: object.description,
+            action: object.action,
+            timeout: object.timeout,
+          });
           break;
         case "hover-image":
           emitter.emit(events.log.log, generator.jsonToManual(object));
