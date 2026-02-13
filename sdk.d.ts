@@ -14,6 +14,13 @@ export type ScrollDirection = "up" | "down" | "left" | "right";
 export type ScrollMethod = "keyboard" | "mouse";
 export type TextMatchMethod = "ai" | "turbo";
 export type ExecLanguage = "js" | "pwsh" | "sh";
+/**
+ * Preview mode for live test visualization
+ * - "browser": Opens debugger in default browser (default)
+ * - "ide": Opens preview in IDE panel (VSCode, Cursor, etc.)
+ * - "none": Headless mode, no visual preview
+ */
+export type PreviewMode = "browser" | "ide" | "none";
 export type KeyboardKey =
   | "\t"
   | "\n"
@@ -232,7 +239,17 @@ export interface TestDriverOptions {
   };
   /** Force creation of a new sandbox (default: true) */
   newSandbox?: boolean;
-  /** Run in headless mode (default: false) */
+  /**
+   * Preview mode for live test visualization (default: "browser")
+   * - "browser": Opens debugger in default browser
+   * - "ide": Opens preview in IDE panel (VSCode, Cursor, etc.)
+   * - "none": Headless mode, no visual preview
+   */
+  preview?: PreviewMode;
+  /**
+   * @deprecated Use `preview: "none"` instead. Run in headless mode (default: false)
+   * For backward compatibility: headless: true maps to preview: "none"
+   */
   headless?: boolean;
   /** Direct IP address to connect to a running sandbox instance */
   ip?: string;
@@ -246,6 +263,13 @@ export interface TestDriverOptions {
   reconnect?: boolean;
   /** Enable/disable Dashcam video recording (default: true) */
   dashcam?: boolean;
+  /**
+   * Enable automatic screenshots before and after each command (default: true)
+   * Screenshots are saved to .testdriver/screenshots/<test>/ with descriptive filenames
+   * Format: <seq>-<action>-<phase>-L<line>-<description>.png
+   * Example: 001-click-before-L42-submit-button.png
+   */
+  autoScreenshots?: boolean;
   /** Redraw configuration for screen change detection */
   redraw?:
     | boolean
@@ -280,7 +304,17 @@ export interface ConnectOptions {
   sandboxInstance?: string;
   /** Operating system for the sandbox (default: 'linux') */
   os?: "windows" | "linux";
-  /** Run in headless mode (default: false) */
+  /**
+   * Preview mode for live test visualization (default: "browser")
+   * - "browser": Opens debugger in default browser
+   * - "ide": Opens preview in IDE panel (VSCode, Cursor, etc.)
+   * - "none": Headless mode, no visual preview
+   */
+  preview?: PreviewMode;
+  /**
+   * @deprecated Use `preview: "none"` instead. Run in headless mode (default: false)
+   * For backward compatibility: headless: true maps to preview: "none"
+   */
   headless?: boolean;
   /** Reuse recent connection if available (default: true) */
   reuseConnection?: boolean;
@@ -328,6 +362,42 @@ export interface HoverResult {
   centerX: number;
   centerY: number;
   [key: string]: any;
+}
+
+/** Bounding box for an OCR word */
+export interface OCRBoundingBox {
+  /** Left edge X coordinate */
+  x0: number;
+  /** Top edge Y coordinate */
+  y0: number;
+  /** Right edge X coordinate */
+  x1: number;
+  /** Bottom edge Y coordinate */
+  y1: number;
+}
+
+/** Individual word extracted by OCR */
+export interface OCRWord {
+  /** The text content of the word */
+  content: string;
+  /** Confidence score for this word (0-100) */
+  confidence: number;
+  /** Bounding box coordinates */
+  bbox: OCRBoundingBox;
+}
+
+/** Result from OCR text extraction */
+export interface OCRResult {
+  /** Array of extracted words with positions */
+  words: OCRWord[];
+  /** All text concatenated with spaces */
+  fullText: string;
+  /** Overall OCR confidence (0-100) */
+  confidence: number;
+  /** Width of the analyzed screenshot */
+  imageWidth: number;
+  /** Height of the analyzed screenshot */
+  imageHeight: number;
 }
 
 // ====================================
@@ -486,6 +556,14 @@ export interface ExtractOptions {
 export interface AssertOptions {
   /** Assertion to check */
   assertion: string;
+  /** Cache threshold (0-1). Lower values require closer matches. Set to -1 to disable cache. */
+  threshold?: number;
+  /** Cache key for grouping cached assertions (enables caching when provided) */
+  cacheKey?: string;
+  /** Operating system identifier for cache partitioning */
+  os?: string;
+  /** Screen resolution for cache partitioning */
+  resolution?: string;
 }
 
 /** Options for exec command */
@@ -769,6 +847,18 @@ export interface ProvisionElectronOptions {
   args?: string[];
 }
 
+/** Options for provision.dashcam */
+export interface ProvisionDashcamOptions {
+  /** Path to log file (auto-generated if not provided) */
+  logPath?: string;
+  /** Display name for the log (default: 'TestDriver Log') */
+  logName?: string;
+  /** Enable web log tracking (default: true) */
+  webLogs?: boolean;
+  /** Custom title for the recording */
+  title?: string;
+}
+
 /** Provision API for launching applications */
 export interface ProvisionAPI {
   /**
@@ -801,6 +891,12 @@ export interface ProvisionAPI {
    * @param options - Electron launch options
    */
   electron(options: ProvisionElectronOptions): Promise<void>;
+
+  /**
+   * Initialize Dashcam recording with logging
+   * @param options - Dashcam options
+   */
+  dashcam(options?: ProvisionDashcamOptions): Promise<void>;
 }
 
 /** Dashcam API for screen recording */
@@ -822,7 +918,26 @@ export interface DashcamAPI {
 }
 
 export default class TestDriverSDK {
-  constructor(apiKey: string, options?: TestDriverOptions);
+  /**
+   * Create a new TestDriverSDK instance
+   * Automatically loads environment variables from .env file via dotenv.
+   * 
+   * @param apiKey - API key (optional, defaults to TD_API_KEY environment variable)
+   * @param options - SDK configuration options
+   * 
+   * @example
+   * // API key loaded automatically from TD_API_KEY in .env
+   * const client = new TestDriver();
+   * 
+   * @example
+   * // Pass options only (API key from .env)
+   * const client = new TestDriver({ os: 'windows' });
+   * 
+   * @example
+   * // Or pass API key explicitly
+   * const client = new TestDriver('your-api-key');
+   */
+  constructor(apiKey?: string | TestDriverOptions, options?: TestDriverOptions);
 
   /**
    * Whether the SDK is currently connected to a sandbox
@@ -1138,9 +1253,21 @@ export default class TestDriverSDK {
   /**
    * Make an AI-powered assertion
    * @param assertion - Assertion to check
-   * @param options - Additional options (reserved for future use)
+   * @param options - Cache options for the assertion
+   *
+   * @example
+   * // Simple assertion
+   * await client.assert('the login form is visible');
+   *
+   * @example
+   * // With caching enabled via cacheKey
+   * await client.assert('the submit button is enabled', { cacheKey: 'my-test-run' });
+   *
+   * @example
+   * // With custom threshold
+   * await client.assert('the page loaded', { threshold: 0.01, cacheKey: 'login-test' });
    */
-  assert(assertion: string, options?: object): Promise<boolean>;
+  assert(assertion: string, options?: { threshold?: number; cacheKey?: string; os?: string; resolution?: string }): Promise<boolean>;
 
   /**
    * Extract information from the screen using AI
@@ -1199,6 +1326,34 @@ export default class TestDriverSDK {
   screenshot(filename?: string): Promise<string>;
 
   /**
+   * Extract all visible text from the current screen using OCR (Tesseract)
+   * Returns structured data with text content, bounding boxes, and confidence scores
+   *
+   * @returns OCR extraction result with words, positions, and confidence
+   *
+   * @example
+   * // Get all text on screen
+   * const result = await testdriver.ocr();
+   * console.log(result.fullText);
+   *
+   * @example
+   * // Find and click text
+   * const result = await testdriver.ocr();
+   * const submit = result.words.find(w => w.content === 'Submit');
+   * if (submit) {
+   *   const x = (submit.bbox.x0 + submit.bbox.x1) / 2;
+   *   const y = (submit.bbox.y0 + submit.bbox.y1) / 2;
+   *   await testdriver.click({ x, y });
+   * }
+   *
+   * @example
+   * // Check if text exists
+   * const result = await testdriver.ocr();
+   * const hasError = result.words.some(w => w.content.toLowerCase().includes('error'));
+   */
+  ocr(): Promise<OCRResult>;
+
+  /**
    * Wait for specified time
    * @deprecated Consider using element polling with find() instead of arbitrary waits
    * @param timeout - Time to wait in milliseconds (default: 3000)
@@ -1229,6 +1384,7 @@ export default class TestDriverSDK {
   // AI Methods (Exploratory Loop)
 
   /**
+   * @deprecated Use ai() instead
    * Execute a natural language task using AI
    * This is the SDK equivalent of the CLI's exploratory loop
    *
@@ -1238,11 +1394,11 @@ export default class TestDriverSDK {
    *
    * @example
    * // Simple execution
-   * await client.act('Click the submit button');
+   * await client.ai('Click the submit button');
    *
    * @example
    * // With validation loop
-   * const result = await client.act('Fill out the contact form', { validateAndLoop: true });
+   * const result = await client.ai('Fill out the contact form', { validateAndLoop: true });
    * console.log(result); // AI's final assessment
    */
   act(
@@ -1251,7 +1407,6 @@ export default class TestDriverSDK {
   ): Promise<string | void>;
 
   /**
-   * @deprecated Use act() instead
    * Execute a natural language task using AI
    *
    * @param task - Natural language description of what to do

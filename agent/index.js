@@ -36,6 +36,7 @@ const { createOutputs } = require("./lib/outputs.js");
 const isValidVersion = require("./lib/valid-version.js");
 const { events, createEmitter } = require("./events.js");
 const { createDebuggerProcess } = require("./lib/debugger.js");
+const logger = require("./lib/logger.js");
 let debuggerProcess = null; // single debugger process for all instances. otherwise they'll fight over ports. this should be in `web` anyway
 let debuggerStarted = false;
 
@@ -110,8 +111,8 @@ class TestDriverAgent extends EventEmitter2 {
     this.sandbox = createSandbox(this.emitter, this.analytics, this.session);
 
     // Attach Sentry log listeners to capture CLI logs as breadcrumbs
-      const sentry = require("../lib/sentry");
-      sentry.attachLogListeners(this.emitter);
+    const sentry = require("../lib/sentry");
+    sentry.attachLogListeners(this.emitter);
 
     // Set the OS for the sandbox to use
     this.sandbox.os = this.sandboxOs;
@@ -129,6 +130,7 @@ class TestDriverAgent extends EventEmitter2 {
       () => this.sourceMapper.currentFilePath || this.thisFile,
       this.cliArgs.options.redrawThreshold,
       null, // getDashcamElapsedTime - will be set by SDK when dashcam is available
+      () => this.softAssertMode, // getter for soft assert mode (used by act())
     );
     this.commands = commandsResult.commands;
     this.redraw = commandsResult.redraw;
@@ -169,6 +171,9 @@ class TestDriverAgent extends EventEmitter2 {
     // Flag to indicate if the agent should stop execution
     this.stopped = false;
 
+    // Flag to suppress assertion throws (used by act() to make check-phase assertions non-fatal)
+    this.softAssertMode = false;
+
     this.emitter.emit(events.log.log, JSON.stringify(environment));
     this.emitter.emit(events.log.log, JSON.stringify(cliArgs));
   }
@@ -187,7 +192,14 @@ class TestDriverAgent extends EventEmitter2 {
   // allows us to save the current state, run lifecycle hooks, and track analytics
   async exit(failed = true, shouldSave = false, shouldRunPostrun = false) {
     const { formatter } = require("../sdk-log-formatter.js");
-    this.emitter.emit(events.log.narration, formatter.getPrefix("disconnect") + " " + theme.yellow.bold("Exiting") + theme.dim("..."), true);
+    this.emitter.emit(
+      events.log.narration,
+      formatter.getPrefix("disconnect") +
+        " " +
+        theme.yellow.bold("Exiting") +
+        theme.dim("..."),
+      true,
+    );
 
     // Clean up redraw interval
     if (this.redraw && this.redraw.cleanup) {
@@ -236,9 +248,7 @@ class TestDriverAgent extends EventEmitter2 {
     if (errorContext) {
       this.emitter.emit(events.error.fatal, errorContext);
     } else {
-      this.emitter.emit(
-        events.error.fatal,error,
-      );
+      this.emitter.emit(events.error.fatal, error);
     }
 
     if (skipPostrun) {
@@ -427,22 +437,23 @@ class TestDriverAgent extends EventEmitter2 {
     this.emitter.emit(events.log.narration, theme.dim("checking..."));
 
     // check asks the ai if the task is complete
-    let thisScreenshot = await this.system.captureScreenBase64(1, false, true);
+    // Parallelize system calls for better performance
+    const [thisScreenshot, mousePosition, activeWindow] = await Promise.all([
+      this.system.captureScreenBase64(1, false, true),
+      this.system.getMousePosition(),
+      this.system.activeWin(),
+    ]);
     let images = [this.lastScreenshot, thisScreenshot];
-    let mousePosition = await this.system.getMousePosition();
-    let activeWindow = await this.system.activeWin();
 
-    let response = await this.sdk.req(
-      "check",
-      {
-        tasks: this.tasks,
-        images,
-        mousePosition,
-        activeWindow,
-      }
-    );
+    let response = await this.sdk.req("check", {
+      tasks: this.tasks,
+      images,
+      mousePosition,
+      activeWindow,
+    });
 
-    this.emitter.emit(events.log.markdown.static, response.data);
+    // Use log.log (not markdown.static) so output goes through console spy to sandbox
+    this.emitter.emit(events.log.log, response.data);
 
     this.lastScreenshot = thisScreenshot;
 
@@ -873,7 +884,7 @@ commands:
     currentTask,
     dry = false,
     validateAndLoop = false,
-    shouldSave = true
+    shouldSave = true,
   ) {
     // Check if execution has been stopped
     if (this.stopped) {
@@ -894,17 +905,20 @@ commands:
 
     this.emitter.emit(events.log.narration, theme.dim("thinking..."), true);
 
-    this.lastScreenshot = await this.system.captureScreenBase64();
+    // Parallelize system calls for better performance
+    const [screenshot, mousePosition, activeWindow] = await Promise.all([
+      this.system.captureScreenBase64(),
+      this.system.getMousePosition(),
+      this.system.activeWin(),
+    ]);
+    this.lastScreenshot = screenshot;
 
-    let message = await this.sdk.req(
-      "input",
-      {
-        input: currentTask,
-        mousePosition: await this.system.getMousePosition(),
-        activeWindow: await this.system.activeWin(),
-        image: this.lastScreenshot,
-      }
-    );
+    let message = await this.sdk.req("input", {
+      input: currentTask,
+      mousePosition,
+      activeWindow,
+      image: this.lastScreenshot,
+    });
 
     this.emitter.emit(events.log.log, message.data);
 
@@ -933,13 +947,15 @@ commands:
 
     this.emitter.emit(events.log.narration, theme.dim("thinking..."), true);
 
-    let image = await this.system.captureScreenBase64();
-
     const streamId = `generate-${Date.now()}`;
     this.emitter.emit(events.log.markdown.start, streamId);
 
-    let mouse = await this.system.getMousePosition();
-    let activeWindow = await this.system.activeWin();
+    // Parallelize system calls for better performance
+    const [image, mouse, activeWindow] = await Promise.all([
+      this.system.captureScreenBase64(),
+      this.system.getMousePosition(),
+      this.system.activeWin(),
+    ]);
 
     let message = await this.sdk.req(
       "generate",
@@ -983,9 +999,9 @@ commands:
       const generateDir = path.join(this.workingDir, "testdriver", "generate");
       if (!fs.existsSync(generateDir)) {
         fs.mkdirSync(generateDir);
-        console.log("Created generate directory:", generateDir);
+        logger.log("Created generate directory:", generateDir);
       } else {
-        console.log("Generate directory already exists:", generateDir);
+        logger.log("Generate directory already exists:", generateDir);
       }
 
       let list = testPrompt.steps;
@@ -1621,8 +1637,8 @@ ${regression}
 
   // Returns the path to the last sandbox file
   getLastSandboxFilePath() {
-    const testdriverDir = path.join(process.cwd(), '.testdriver');
-    return path.join(testdriverDir, 'last-sandbox');
+    const testdriverDir = path.join(process.cwd(), ".testdriver");
+    return path.join(testdriverDir, "last-sandbox");
   }
 
   // Returns full sandbox info from last-sandbox file (no timeout - let API validate)
@@ -1643,7 +1659,7 @@ ${regression}
 
         return {
           sandboxId: sandboxInfo.sandboxId || sandboxInfo.instanceId || null,
-          os: sandboxInfo.os || 'linux',
+          os: sandboxInfo.os || "linux",
           ami: sandboxInfo.ami || null,
           instanceType: sandboxInfo.instanceType || null,
           timestamp: sandboxInfo.timestamp || null,
@@ -1658,7 +1674,7 @@ ${regression}
   // Returns sandboxId to use if AMI/instance type match current requirements
   getRecentSandboxId() {
     const sandboxInfo = this.getLastSandboxId();
-    
+
     if (!sandboxInfo || !sandboxInfo.sandboxId) {
       return null;
     }
@@ -1685,13 +1701,13 @@ ${regression}
   saveLastSandboxId(sandboxId, osType = "linux") {
     const lastSandboxFile = this.getLastSandboxFilePath();
     const testdriverDir = path.dirname(lastSandboxFile);
-    
+
     try {
       // Ensure .testdriver directory exists
       if (!fs.existsSync(testdriverDir)) {
         fs.mkdirSync(testdriverDir, { recursive: true });
       }
-      
+
       const sandboxInfo = {
         sandboxId: sandboxId,
         os: osType,
@@ -1752,15 +1768,9 @@ ${regression}
       // Also clear this.sandboxId to prevent reconnection attempts
       this.sandboxId = null;
       if (!this.config.CI && !this.newSandbox) {
-        this.emitter.emit(
-          events.log.log,
-          theme.dim("--`new` flag detected, will create a new sandbox"),
-        );
+        this.emitter.emit(events.log.log, theme.dim("Creating a new sandbox"));
       } else if (this.newSandbox) {
-        this.emitter.emit(
-          events.log.log,
-          theme.dim("--new-sandbox flag detected, will create a new sandbox"),
-        );
+        this.emitter.emit(events.log.log, theme.dim("Creating a new sandbox"));
       }
     }
 
@@ -1797,7 +1807,7 @@ ${regression}
         theme.dim(`using recent sandbox: ${recentId}`),
       );
       this.sandboxId = recentId;
-      
+
       try {
         let instance = await this.connectToSandboxDirect(
           this.sandboxId,
@@ -1845,13 +1855,17 @@ ${regression}
         console.error("Failed to reconnect to sandbox:", error);
       }
     }
-    
+
     // Create new sandbox (either because createNew is true, or no existing sandbox to connect to)
     if (!this.instance) {
       const { formatter } = require("../sdk-log-formatter.js");
       this.emitter.emit(
         events.log.narration,
-        formatter.getPrefix("connect") + " " + theme.green.bold("Creating") + " " + theme.cyan(`new sandbox...`),
+        formatter.getPrefix("connect") +
+          " " +
+          theme.green.bold("Creating") +
+          " " +
+          theme.cyan(`new sandbox...`),
       );
       // We don't have resiliency/retries baked in, so let's at least give it 1 attempt
       // to see if that fixes the issue.
@@ -1864,11 +1878,12 @@ ${regression}
       });
 
       // Extract the sandbox ID from the newly created sandbox
-      this.sandboxId = newSandbox?.sandbox?.sandboxId || newSandbox?.sandbox?.instanceId;
-      
+      this.sandboxId =
+        newSandbox?.sandbox?.sandboxId || newSandbox?.sandbox?.instanceId;
+
       // Use the configured sandbox OS type
       this.saveLastSandboxId(this.sandboxId, this.sandboxOs);
-      
+
       let instance = await this.connectToSandboxDirect(
         this.sandboxId,
         true, // always persist by default
@@ -1997,7 +2012,6 @@ ${regression}
   }
 
   async renderSandbox(instance, headless = false) {
-
     if (!headless) {
       let url;
 
@@ -2014,7 +2028,7 @@ ${regression}
           "/vnc_lite.html?token=V3b8wG9";
       } else {
         // If we don't have URL or IP, we can't render
-        console.warn("renderSandbox: Missing URL and IP in instance", instance);
+        logger.warn("renderSandbox: Missing URL and IP in instance", instance);
         return;
       }
 
@@ -2023,6 +2037,7 @@ ${regression}
         url: url,
         token: "V3b8wG9",
         testFile: this.testFile || null,
+        os: this.sandboxOs || "linux",
       };
 
       // Base64 encode the data (the debugger expects base64, not URL encoding)
@@ -2031,8 +2046,178 @@ ${regression}
       // Use the debugger URL instead of the VNC URL
       const urlToOpen = `${this.debuggerUrl}?data=${encodedData}`;
 
-      this.emitter.emit(events.showWindow, urlToOpen);
+      // Check preview mode from CLI options (SDK passes it directly)
+      const previewMode = (this.cliArgs.options && this.cliArgs.options.preview) || this.config.TD_PREVIEW || "browser";
+      console.log("[DEBUG renderSandbox] preview:", previewMode);
+
+      if (previewMode === "ide") {
+        // Send session to VS Code extension via HTTP
+        this.writeIdeSessionFile(urlToOpen, data);
+      } else if (previewMode !== "none") {
+        // Open in browser (default behavior)
+        this.emitter.emit(events.showWindow, urlToOpen);
+      }
+      // If preview is "none", don't open anything
     }
+  }
+
+  // Write session file for IDE preview (VSCode extension watches for these)
+  writeIdeSessionFile(debuggerUrl, data) {
+    const fs = require("fs");
+    const path = require("path");
+
+    const sessionId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const previewsDir = path.join(process.cwd(), ".testdriver", ".previews");
+
+    // Create the previews directory if it doesn't exist
+    if (!fs.existsSync(previewsDir)) {
+      fs.mkdirSync(previewsDir, { recursive: true });
+    }
+
+    const sessionData = {
+      sessionId,
+      debuggerUrl,
+      resolution: Array.isArray(data.resolution) ? data.resolution : (data.resolution ? data.resolution.split("x").map(Number) : [1920, 1080]),
+      testFile: data.testFile || this.testFile || null,
+      os: data.os || this.sandboxOs || "linux",
+      timestamp: Date.now(),
+    };
+
+    const filePath = path.join(previewsDir, `${sessionId}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(sessionData, null, 2));
+
+    logger.log(`IDE preview session written to ${filePath}`);
+  }
+
+  // Find the VS Code instance that contains the test file
+  findTargetIdeInstance(testFilePath) {
+    const fs = require("fs");
+    const os = require("os");
+    const path = require("path");
+
+    const instancesDir = path.join(os.homedir(), ".testdriver", "ide-instances");
+    
+    if (!fs.existsSync(instancesDir)) {
+      return null;
+    }
+
+    const files = fs.readdirSync(instancesDir);
+    const normalizedTestPath = testFilePath ? path.normalize(testFilePath) : null;
+    
+    let matchingInstance = null;
+    let longestMatchLength = 0;
+
+    for (const file of files) {
+      if (!file.endsWith('.json')) continue;
+      
+      try {
+        const registrationPath = path.join(instancesDir, file);
+        const registration = JSON.parse(fs.readFileSync(registrationPath, 'utf-8'));
+        
+        // Check if this instance is still alive (registration within last 60 seconds or process exists)
+        const isRecent = Date.now() - registration.timestamp < 60000;
+        
+        // Skip stale registrations
+        if (!isRecent) {
+          // Try to clean up stale file
+          try { fs.unlinkSync(registrationPath); } catch {}
+          continue;
+        }
+
+        // If we have a test file path, find the best matching workspace
+        if (normalizedTestPath && registration.workspacePaths) {
+          for (const workspacePath of registration.workspacePaths) {
+            const normalizedWorkspace = path.normalize(workspacePath);
+            if (normalizedTestPath.startsWith(normalizedWorkspace + path.sep) || 
+                normalizedTestPath === normalizedWorkspace) {
+              // Prefer longest match (most specific workspace)
+              if (normalizedWorkspace.length > longestMatchLength) {
+                longestMatchLength = normalizedWorkspace.length;
+                matchingInstance = registration;
+              }
+            }
+          }
+        } else if (!matchingInstance) {
+          // If no test file path, just use the first available instance
+          matchingInstance = registration;
+        }
+      } catch (error) {
+        // Ignore malformed registration files
+      }
+    }
+
+    return matchingInstance;
+  }
+
+  // Send session notification to VS Code extension via HTTP
+  sendIdeSessionNotification(debuggerUrl, data) {
+    const http = require("http");
+    const path = require("path");
+
+    const testFilePath = data.testFile || this.thisFile;
+    const targetInstance = this.findTargetIdeInstance(testFilePath);
+
+    if (!targetInstance) {
+      logger.warn("No VS Code instance found for IDE preview. Make sure VS Code with TestDriver extension is open.");
+      // Fall back to browser
+      this.emitter.emit(events.showWindow, debuggerUrl);
+      return;
+    }
+
+    // Generate a unique session ID
+    const testFileName = (testFilePath || "test")
+      .split(path.sep).pop()
+      .replace(/\.[^/.]+$/, "");
+    const sessionId = `${testFileName}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+
+    const sessionData = {
+      sessionId: sessionId,
+      debuggerUrl: debuggerUrl,
+      resolution: data.resolution || this.config.TD_RESOLUTION,
+      testFile: testFilePath,
+      os: data.os || this.sandboxOs || "linux",
+      timestamp: Date.now(),
+    };
+
+    const postData = JSON.stringify(sessionData);
+
+    const options = {
+      hostname: '127.0.0.1',
+      port: targetInstance.port,
+      path: '/session',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData)
+      },
+      timeout: 5000
+    };
+
+    const req = http.request(options, (res) => {
+      if (res.statusCode === 200) {
+        logger.log(`IDE session notification sent to port ${targetInstance.port}`);
+      } else {
+        logger.warn(`IDE session notification failed with status ${res.statusCode}`);
+        // Fall back to browser on failure
+        this.emitter.emit(events.showWindow, debuggerUrl);
+      }
+    });
+
+    req.on('error', (error) => {
+      logger.warn(`Failed to send IDE session notification: ${error.message}`);
+      // Fall back to browser on error
+      this.emitter.emit(events.showWindow, debuggerUrl);
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      logger.warn('IDE session notification timed out');
+      // Fall back to browser on timeout
+      this.emitter.emit(events.showWindow, debuggerUrl);
+    });
+
+    req.write(postData);
+    req.end();
   }
 
   async connectToSandboxService() {
@@ -2051,7 +2236,13 @@ Please check your network connection, TD_API_KEY, or the service status.`,
     }
 
     const { formatter } = require("../sdk-log-formatter.js");
-    this.emitter.emit(events.log.narration, formatter.getPrefix("connect") + " " + theme.green.bold("Authenticating") + theme.dim("..."));
+    this.emitter.emit(
+      events.log.narration,
+      formatter.getPrefix("connect") +
+        " " +
+        theme.green.bold("Authenticating") +
+        theme.dim("..."),
+    );
     let ableToAuth = await this.sandbox.auth(this.config.TD_API_KEY);
 
     if (!ableToAuth) {
@@ -2065,7 +2256,14 @@ Please check your network connection, TD_API_KEY, or the service status.`,
 
   async connectToSandboxDirect(sandboxId, persist = false, keepAlive = null) {
     const { formatter } = require("../sdk-log-formatter.js");
-    this.emitter.emit(events.log.narration, formatter.getPrefix("connect") + " " + theme.green.bold("Connecting") + " " + theme.cyan(`to sandbox...`));
+    this.emitter.emit(
+      events.log.narration,
+      formatter.getPrefix("connect") +
+        " " +
+        theme.green.bold("Connecting") +
+        " " +
+        theme.cyan(`to sandbox...`),
+    );
     let reply = await this.sandbox.connect(sandboxId, persist, keepAlive);
 
     // reply includes { success, url, sandbox: {...} }
@@ -2107,15 +2305,18 @@ Please check your network connection, TD_API_KEY, or the service status.`,
       let response = await this.sandbox.send(sandboxConfig, 60000 * 8);
 
       // Check if queued (all slots in use)
-      if (response.type === 'create.queued') {
+      if (response.type === "create.queued") {
         this.emitter.emit(
           events.log.narration,
-          formatter.getPrefix("queue") + " " + theme.yellow.bold("Waiting") + " " +
-          theme.dim(response.message),
+          formatter.getPrefix("queue") +
+            " " +
+            theme.yellow.bold("Waiting") +
+            " " +
+            theme.dim(response.message),
         );
 
         // Wait then retry
-        await new Promise(resolve => setTimeout(resolve, retryDelay));
+        await new Promise((resolve) => setTimeout(resolve, retryDelay));
         continue;
       }
 
@@ -2134,10 +2335,14 @@ Please check your network connection, TD_API_KEY, or the service status.`,
     // should be start of new session
     // If sandbox is connected, get system info; otherwise pass empty objects
     const isSandboxConnected = this.sandbox.apiSocketConnected;
-    
+
     const sessionRes = await this.sdk.req("session/start", {
-      systemInformationOsInfo: isSandboxConnected ? await this.system.getSystemInformationOsInfo() : {},
-      mousePosition: isSandboxConnected ? await this.system.getMousePosition() : {},
+      systemInformationOsInfo: isSandboxConnected
+        ? await this.system.getSystemInformationOsInfo()
+        : {},
+      mousePosition: isSandboxConnected
+        ? await this.system.getMousePosition()
+        : {},
       activeWindow: isSandboxConnected ? await this.system.activeWin() : {},
     });
 
@@ -2148,7 +2353,7 @@ Please check your network connection, TD_API_KEY, or the service status.`,
     }
 
     this.session.set(sessionRes.data.id);
-    
+
     // Set Sentry session trace context for distributed tracing
     // This links CLI errors/logs to the same trace as API calls
     try {

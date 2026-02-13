@@ -377,6 +377,12 @@ class SDKLogFormatter {
     if (meta.cacheHit) {
       metaParts.push(chalk.bold.yellow("⚡ cached"));
     }
+    if (meta.confidence !== undefined && meta.confidence !== null) {
+      metaParts.push(chalk.dim.gray(`confidence: ${meta.confidence}`));
+    }
+    if (meta.reasoning) {
+      metaParts.push(chalk.dim.gray(`reasoning: ${meta.reasoning}`));
+    }
     // Duration always last
     if (meta.duration) {
       metaParts.push(this.formatDurationColored(meta.duration, thresholdKey));
@@ -477,9 +483,10 @@ class SDKLogFormatter {
    * @param {boolean} passed - Whether assertion passed
    * @param {string} response - The AI response message
    * @param {number} durationMs - Duration in milliseconds
+   * @param {boolean} cacheHit - Whether the result was from cache
    * @returns {string} Formatted result line
    */
-  formatAssertResult(passed, response, durationMs) {
+  formatAssertResult(passed, response, durationMs, cacheHit = false) {
     const parts = [];
     this.addTimestamp(parts);
     parts.push(this.getResultPrefix());
@@ -488,6 +495,12 @@ class SDKLogFormatter {
       parts.push(chalk.green("passed"));
     } else {
       parts.push(chalk.red("failed"));
+    }
+    
+    // Add cache hit indicator (like find does)
+    if (cacheHit) {
+      parts.push(chalk.dim("·"));
+      parts.push(chalk.bold.yellow("⚡ cached"));
     }
     
     // Add the response message (trimmed)

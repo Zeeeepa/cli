@@ -1,10 +1,20 @@
 const BaseCommand = require("../lib/base.js");
 const { createCommandDefinitions } = require("../../../agent/interface.js");
+const { initProject } = require("../../../lib/init-project.js");
 const fs = require("fs");
 const path = require("path");
 const chalk = require("chalk");
-const { execSync } = require("child_process");
 const readline = require("readline");
+const os = require("os");
+const { execSync } = require("child_process");
+
+// Load .env file for CLI usage (TD_API_ROOT, etc.)
+require("dotenv").config();
+
+// API configuration
+const API_BASE_URL = process.env.TD_API_ROOT || "https://testdriver-api.onrender.com";
+const POLL_INTERVAL = 5000; // 5 seconds
+const POLL_TIMEOUT = 900000; // 15 minutes
 
 /**
  * Init command - scaffolds Vitest SDK example tests for TestDriver
@@ -15,38 +25,102 @@ class InitCommand extends BaseCommand {
 
     console.log(chalk.cyan("\n🚀 Initializing TestDriver project...\n"));
 
-    await this.setupPackageJson();
-    await this.createVitestExample();
-    await this.createGitHubWorkflow();
-    await this.createGitignore();
-    await this.installDependencies();
-    await this.promptForApiKey();
+    // Prompt for API key first
+    const apiKey = await this.promptForApiKey();
 
-    console.log(chalk.green("\n✅ Project initialized successfully!\n"));
-    this.printNextSteps();
-    process.exit(0);
+    // Helper to print progress messages with appropriate colors
+    const printProgress = (msg) => {
+      if (msg.startsWith("✓")) {
+        console.log(chalk.green(`  ${msg}`));
+      } else if (msg.startsWith("⚠") || msg.startsWith("ℹ")) {
+        console.log(chalk.yellow(`  ${msg}`));
+      } else if (msg.startsWith("⊘")) {
+        console.log(chalk.gray(`  ${msg}`));
+      } else {
+        console.log(`  ${msg}`);
+      }
+    };
+
+    // Run the shared init logic with real-time progress output
+    const result = await initProject({
+      targetDir: process.cwd(),
+      apiKey: apiKey,
+      skipInstall: false,
+      onProgress: printProgress,
+    });
+
+    // Print errors if any
+    for (const err of result.errors) {
+      console.log(chalk.yellow(`  ⚠️  ${err}`));
+    }
+
+    // Handle shell profile for API key (CLI-specific feature)
+    if (apiKey && apiKey.trim()) {
+      this.addToShellProfile("TD_API_KEY", apiKey.trim());
+    }
+
+    if (result.success) {
+      console.log(chalk.green("\n✅ Project initialized successfully!\n"));
+      this.printNextSteps();
+      process.exit(0);
+    } else {
+      console.log(chalk.red("\n❌ Project initialization completed with errors.\n"));
+      process.exit(1);
+    }
   }
 
   /**
    * Prompt user for API key and save to .env
+   * @returns {Promise<string|null>} The API key or null if skipped
    */
   async promptForApiKey() {
     const envPath = path.join(process.cwd(), ".env");
 
-    // Check if .env already exists with TD_API_KEY
+    // Check if .env already exists with a valid TD_API_KEY value
     if (fs.existsSync(envPath)) {
       const envContent = fs.readFileSync(envPath, "utf8");
-      if (envContent.includes("TD_API_KEY=")) {
-        console.log(
-          chalk.gray("\n  API key already configured in .env, skipping...\n"),
-        );
-        return;
+      // Match TD_API_KEY= that's not commented out and has a real value (not empty or placeholder)
+      const apiKeyMatch = envContent.match(/^TD_API_KEY=(.+)$/m);
+      if (apiKeyMatch) {
+        const value = apiKeyMatch[1].trim();
+        // Skip only if there's a real value (not empty or placeholder text)
+        if (value && value !== "your_api_key" && !value.startsWith("<") && !value.startsWith("$")) {
+          console.log(
+            chalk.gray("\n  API key already configured in .env, skipping...\n"),
+          );
+          return null;
+        }
       }
     }
 
     console.log(chalk.cyan("  Setting up your TestDriver API key...\n"));
+
+    // Ask user how they want to authenticate
+    const choice = await this.askChoice(
+      "  How would you like to authenticate?\n",
+      [
+        { key: "1", label: "Login with browser", description: "(recommended)" },
+        { key: "2", label: "Enter API key manually", description: "" },
+      ],
+    );
+
+    if (choice === "1") {
+      // Browser login flow
+      try {
+        const apiKey = await this.browserLogin();
+        if (apiKey) {
+          console.log(chalk.green("\n  ✓ Logged in successfully!\n"));
+          return apiKey;
+        }
+      } catch (error) {
+        console.log(chalk.yellow(`\n  ⚠️  Browser login failed: ${error.message}\n`));
+        console.log(chalk.gray("  Falling back to manual API key entry...\n"));
+      }
+    }
+
+    // Manual API key entry
     console.log(
-      chalk.gray("  Get your API key from: https://console.testdriver.ai/team"),
+      chalk.gray("  Get your API key from: https://console.testdriver.ai/team\n"),
     );
 
     // Ask if user wants to open the browser
@@ -55,7 +129,6 @@ class InitCommand extends BaseCommand {
     );
     if (shouldOpen) {
       try {
-        // Dynamic import for ES module
         const open = (await import("open")).default;
         await open("https://console.testdriver.ai/team");
         console.log(chalk.gray("  Opening browser...\n"));
@@ -72,13 +145,8 @@ class InitCommand extends BaseCommand {
     );
 
     if (apiKey && apiKey.trim()) {
-      // Save to .env
-      const envContent = fs.existsSync(envPath)
-        ? fs.readFileSync(envPath, "utf8") + "\n"
-        : "";
-
-      fs.writeFileSync(envPath, envContent + `TD_API_KEY=${apiKey.trim()}\n`);
-      console.log(chalk.green("\n  ✓ API key saved to .env\n"));
+      console.log(chalk.green("\n  ✓ API key will be saved\n"));
+      return apiKey.trim();
     } else {
       console.log(
         chalk.yellow(
@@ -86,7 +154,121 @@ class InitCommand extends BaseCommand {
         ),
       );
       console.log(chalk.gray("     TD_API_KEY=your_api_key\n"));
+      return null;
     }
+  }
+
+  /**
+   * Browser-based login flow using device code
+   * @returns {Promise<string>} The API key
+   */
+  async browserLogin() {
+    // Step 1: Create device code
+    process.stdout.write(chalk.gray("  Requesting authorization code..."));
+    
+    const createResponse = await fetch(`${API_BASE_URL}/auth/device/code`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (!createResponse.ok) {
+      throw new Error("Failed to create device code");
+    }
+
+    const { device_code, verification_uri, expires_in, interval } = await createResponse.json();
+    console.log(chalk.green(" done\n"));
+
+    // Step 2: Open browser
+    console.log(chalk.cyan(`  Opening browser to authorize CLI...\n`));
+    console.log(chalk.gray(`  If browser doesn't open, visit:\n  ${verification_uri}\n`));
+
+    try {
+      const open = (await import("open")).default;
+      await open(verification_uri);
+    } catch (error) {
+      // Browser didn't open, user can use the URL manually
+    }
+
+    // Step 3: Poll for token
+    const pollInterval = (interval || 5) * 1000;
+    const timeout = (expires_in || 900) * 1000;
+    const startTime = Date.now();
+
+    process.stdout.write(chalk.gray("  Waiting for authorization..."));
+    
+    // Start spinner
+    const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+    let spinnerIndex = 0;
+    const spinnerInterval = setInterval(() => {
+      process.stdout.write(`\r  Waiting for authorization... ${spinnerFrames[spinnerIndex]}`);
+      spinnerIndex = (spinnerIndex + 1) % spinnerFrames.length;
+    }, 100);
+
+    try {
+      while (Date.now() - startTime < timeout) {
+        await this.sleep(pollInterval);
+
+        const tokenResponse = await fetch(`${API_BASE_URL}/auth/device/token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deviceCode: device_code }),
+        });
+
+        const data = await tokenResponse.json();
+
+        if (tokenResponse.ok && data.apiKey) {
+          clearInterval(spinnerInterval);
+          process.stdout.write("\r  Waiting for authorization... " + chalk.green("✓") + "\n");
+          return data.apiKey;
+        }
+
+        if (data.error === "expired_token") {
+          clearInterval(spinnerInterval);
+          throw new Error("Authorization timed out. Please try again.");
+        }
+
+        // authorization_pending - continue polling
+      }
+
+      clearInterval(spinnerInterval);
+      throw new Error("Authorization timed out. Please try again.");
+    } catch (error) {
+      clearInterval(spinnerInterval);
+      process.stdout.write("\n");
+      throw error;
+    }
+  }
+
+  /**
+   * Ask user to choose from a list of options
+   */
+  async askChoice(question, options) {
+    return new Promise((resolve) => {
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+
+      console.log(question);
+      for (const opt of options) {
+        const desc = opt.description ? chalk.gray(` ${opt.description}`) : "";
+        console.log(`  ${chalk.cyan(opt.key)}. ${opt.label}${desc}`);
+      }
+      console.log("");
+
+      rl.question("  Enter choice [1]: ", (answer) => {
+        rl.close();
+        const normalized = answer.trim() || "1";
+        resolve(normalized);
+      });
+    });
+  }
+
+  /**
+   * Sleep for a given number of milliseconds
+   */
+  sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**
@@ -133,6 +315,72 @@ class InitCommand extends BaseCommand {
   }
 
   /**
+   * Add an environment variable export to the user's shell profile
+   */
+  addToShellProfile(key, value) {
+    if (process.platform === "win32") {
+      // On Windows, set a persistent user environment variable via setx
+      try {
+        execSync(`setx ${key} "${value}"`, { stdio: "ignore" });
+        console.log(
+          chalk.green(`  ✓ Set ${key} as user environment variable`),
+        );
+        console.log(
+          chalk.gray(`    Restart your terminal for changes to take effect\n`),
+        );
+      } catch (error) {
+        console.log(
+          chalk.yellow(`  ⚠️  Could not set ${key} via setx. You can set it manually:\n`),
+        );
+        console.log(chalk.gray(`     setx ${key} "your_api_key"\n`));
+      }
+      return;
+    }
+
+    // Unix: append export to shell profile
+    const shell = process.env.SHELL || "/bin/bash";
+    const home = os.homedir();
+    let profilePath;
+
+    if (shell.includes("zsh")) {
+      profilePath = path.join(home, ".zshrc");
+    } else {
+      profilePath = path.join(home, ".bashrc");
+    }
+
+    const exportLine = `export ${key}="${value}"`;
+
+    // Check if already present
+    if (fs.existsSync(profilePath)) {
+      const content = fs.readFileSync(profilePath, "utf8");
+      if (content.includes(`export ${key}=`)) {
+        // Replace existing line
+        const updated = content.replace(
+          new RegExp(`^export ${key}=.*$`, "m"),
+          exportLine,
+        );
+        fs.writeFileSync(profilePath, updated);
+        console.log(
+          chalk.green(`  ✓ Updated ${key} in ${profilePath}`),
+        );
+        console.log(
+          chalk.gray(`    Run: source ${profilePath}  (or open a new terminal)\n`),
+        );
+        return;
+      }
+    }
+
+    // Append to profile
+    fs.appendFileSync(profilePath, `\n${exportLine}\n`);
+    console.log(
+      chalk.green(`  ✓ Added ${key} to ${profilePath}`),
+    );
+    console.log(
+      chalk.gray(`    Run: source ${profilePath}  (or open a new terminal)\n`),
+    );
+  }
+
+  /**
    * Ask a yes/no question
    */
   async askYesNo(question) {
@@ -153,286 +401,18 @@ class InitCommand extends BaseCommand {
   }
 
   /**
-   * Setup package.json if it doesn't exist
-   */
-  async setupPackageJson() {
-    const packageJsonPath = path.join(process.cwd(), "package.json");
-
-    if (!fs.existsSync(packageJsonPath)) {
-      console.log(chalk.gray("  Creating package.json..."));
-
-      const packageJson = {
-        name: path.basename(process.cwd()),
-        version: "1.0.0",
-        description: "TestDriver.ai test suite",
-        type: "module",
-        scripts: {
-          test: "vitest run",
-          "test:watch": "vitest",
-          "test:ui": "vitest --ui",
-        },
-        keywords: ["testdriver", "testing", "e2e"],
-        author: "",
-        license: "ISC",
-        engines: {
-          node: ">=20.19.0",
-        },
-      };
-
-      fs.writeFileSync(
-        packageJsonPath,
-        JSON.stringify(packageJson, null, 2) + "\n",
-      );
-      console.log(chalk.green(`  Created package.json`));
-    } else {
-      console.log(chalk.gray("  package.json already exists, skipping..."));
-    }
-  }
-
-  /**
-   * Create a Vitest SDK example
-   */
-  async createVitestExample() {
-    const testDir = path.join(process.cwd(), "tests");
-    const testFile = path.join(testDir, "example.test.js");
-    const loginSnippetFile = path.join(testDir, "login.js");
-    const configFile = path.join(process.cwd(), "vitest.config.js");
-
-    // Create test directory if it doesn't exist
-    if (!fs.existsSync(testDir)) {
-      fs.mkdirSync(testDir, { recursive: true });
-      console.log(chalk.gray(`  Created directory: ${testDir}`));
-    }
-
-    // Create login snippet file
-    const loginSnippetContent = `/**
- * Login snippet - reusable login function
- * 
- * This demonstrates how to create reusable test snippets that can be
- * imported and used across multiple test files.
- */
-export async function login(testdriver) {
-
-  // The password is displayed on screen, have TestDriver extract it
-  const password = await testdriver.extract('the password');
-
-  // Find the username field
-  const usernameField = await testdriver.find(
-    'username input'
-  );
-  await usernameField.click();
-
-  // Type username
-  await testdriver.type('standard_user');
-
-  // Enter password form earlier 
-  // Marked as secret so it's not logged or stored
-  await testdriver.pressKeys(['tab']);
-  await testdriver.type(password, { secret: true });
-
-  // Submit the form
-  await testdriver.find('submit button on the login form').click();
-}
-`;
-
-    fs.writeFileSync(loginSnippetFile, loginSnippetContent);
-    console.log(chalk.green(`  Created login snippet: ${loginSnippetFile}`));
-
-    // Create example Vitest test that uses the login snippet
-    const vitestContent = `import { test, expect } from 'vitest';
-import { TestDriver } from 'testdriverai/vitest/hooks';
-import { login } from './login.js';
-
-test('should login and add item to cart', async (context) => {
-
-  // Create TestDriver instance - automatically connects to sandbox
-  const testdriver = TestDriver(context);
-
-  // Launch chrome and navigate to demo app
-  await testdriver.provision.chrome({ url: 'http://testdriver-sandbox.vercel.app/login' });
-
-  // Use the login snippet to handle authentication
-  // This demonstrates how to reuse test logic across multiple tests
-  await login(testdriver);
-
-  // Add item to cart
-  const addToCartButton = await testdriver.find(
-    'add to cart button under TestDriver Hat'
-  );
-  await addToCartButton.click();
-
-  // Open cart
-  const cartButton = await testdriver.find(
-    'cart button in the top right corner'
-  );
-  await cartButton.click();
-
-  // Verify item in cart
-  const result = await testdriver.assert('There is an item in the cart');
-  expect(result).toBeTruthy();
-  
-});
-`;
-
-    fs.writeFileSync(testFile, vitestContent);
-    console.log(chalk.green(`  Created test file: ${testFile}`));
-
-    // Create vitest config if it doesn't exist
-    if (!fs.existsSync(configFile)) {
-      const configContent = `import { defineConfig } from 'vitest/config';
-import TestDriver from 'testdriverai/vitest';
-import { config } from 'dotenv';
-
-// Load environment variables from .env file
-config();
-
-export default defineConfig({
-  test: {
-    testTimeout: 300000,
-    hookTimeout: 300000,
-    reporters: [
-      'default',
-      TestDriver(),
-    ],
-    setupFiles: ['testdriverai/vitest/setup'],
-  },
-});
-`;
-
-      fs.writeFileSync(configFile, configContent);
-      console.log(chalk.green(`  Created config file: ${configFile}`));
-    }
-  }
-
-  /**
-   * Create or update .gitignore to include .env
-   */
-  async createGitignore() {
-    const gitignorePath = path.join(process.cwd(), ".gitignore");
-
-    let gitignoreContent = "";
-    if (fs.existsSync(gitignorePath)) {
-      gitignoreContent = fs.readFileSync(gitignorePath, "utf8");
-
-      // Check if .env is already in .gitignore
-      if (gitignoreContent.includes(".env")) {
-        console.log(chalk.gray("  .env already in .gitignore, skipping..."));
-        return;
-      }
-    }
-
-    // Add common ignores including .env
-    const ignoresToAdd = [
-      "",
-      "# TestDriver.ai",
-      ".env",
-      "node_modules/",
-      "test-results/",
-      "*.log",
-    ];
-
-    const newContent = gitignoreContent.trim()
-      ? gitignoreContent + "\n" + ignoresToAdd.join("\n") + "\n"
-      : ignoresToAdd.join("\n") + "\n";
-
-    fs.writeFileSync(gitignorePath, newContent);
-    console.log(chalk.green("  Updated .gitignore"));
-  }
-
-  /**
-   * Create GitHub Actions workflow
-   */
-  async createGitHubWorkflow() {
-    const workflowDir = path.join(process.cwd(), ".github", "workflows");
-    const workflowFile = path.join(workflowDir, "testdriver.yml");
-
-    // Create .github/workflows directory if it doesn't exist
-    if (!fs.existsSync(workflowDir)) {
-      fs.mkdirSync(workflowDir, { recursive: true });
-      console.log(chalk.gray(`  Created directory: ${workflowDir}`));
-    }
-
-    if (!fs.existsSync(workflowFile)) {
-      const workflowContent = `name: TestDriver.ai Tests
-
-on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-        cache: 'npm'
-
-    - name: Install dependencies
-      run: npm ci
-
-    - name: Run TestDriver.ai tests
-      env:
-        TD_API_KEY: \${{ secrets.TD_API_KEY }}
-      run: npx vitest run
-
-    - name: Upload test results
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-results
-        path: test-results/
-        retention-days: 30
-`;
-
-      fs.writeFileSync(workflowFile, workflowContent);
-      console.log(chalk.green(`  Created GitHub workflow: ${workflowFile}`));
-    } else {
-      console.log(chalk.gray("  GitHub workflow already exists, skipping..."));
-    }
-  }
-
-  /**
-   * Install dependencies
-   */
-  async installDependencies() {
-    console.log(chalk.cyan("\n  Installing dependencies...\n"));
-
-    try {
-      execSync(
-        "npm install -D vitest testdriverai@beta && npm install dotenv",
-        {
-          cwd: process.cwd(),
-          stdio: "inherit",
-        },
-      );
-      console.log(chalk.green("\n  Dependencies installed successfully!"));
-    } catch (error) {
-      console.log(
-        chalk.yellow(
-          "\n⚠️  Failed to install dependencies automatically. Please run:",
-        ),
-      );
-      console.log(chalk.gray("     npm install -D vitest testdriverai@beta"));
-      console.log(chalk.gray("     npm install dotenv\n"));
-    }
-  }
-
-  /**
    * Print next steps
    */
   printNextSteps() {
     console.log(chalk.cyan("Next steps:\n"));
     console.log("  1. Run your tests:");
-    console.log(chalk.gray("     npx vitest run\n"));
+    console.log(chalk.gray("     vitest run\n"));
+    console.log("  2. Use AI agents to write tests:");
+    console.log(chalk.gray("     Open VSCode/Cursor and use @testdriver agent\n"));
+    console.log("  3. MCP server configured:");
+    console.log(chalk.gray("     TestDriver tools available via MCP in .vscode/mcp.json\n"));
     console.log(
-      "  2. For CI/CD, add TD_API_KEY to your GitHub repository secrets",
+      "  4. For CI/CD, add TD_API_KEY to your GitHub repository secrets",
     );
     console.log(
       chalk.gray("     Settings → Secrets → Actions → New repository secret\n"),

@@ -6,11 +6,12 @@
  * 
  * Based on the v6 GitButler provisioning workflow.
  * 
- * Run: TD_OS=windows npx vitest run examples/windows-installer.test.mjs
+ * Run: TD_OS=windows vitest run examples/windows-installer.test.mjs
  */
 
 import { describe, it } from "vitest";
 import { TestDriver } from "../lib/vitest/hooks.mjs";
+import { getDefaults } from "./config.mjs";
 
 const isLinux = (process.env.TD_OS || "linux") === "linux";
 
@@ -19,7 +20,7 @@ describe("Windows App Installation", () => {
   it.skipIf(isLinux)("should download, install, and launch GitButler on Windows", async (context) => {
     // Alternative approach using provision.installer helper
     const testdriver = TestDriver(context, { 
-      ip: context.ip || process.env.TD_IP,
+      ...getDefaults(context),
       os: 'windows'
     });
 
