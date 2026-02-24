@@ -2,12 +2,112 @@ import { execSync } from "child_process";
 import crypto from "crypto";
 import fs from "fs";
 import { createRequire } from "module";
+import os from "os";
 import path from "path";
 import { postOrUpdateTestResults } from "../lib/github-comment.mjs";
 import { setTestRunInfo } from "./shared-test-state.mjs";
 
 // Use createRequire to import CommonJS modules without esbuild processing
 const require = createRequire(import.meta.url);
+
+// Import Sentry for error reporting
+const Sentry = require("@sentry/node");
+
+// Track if Sentry has been initialized
+let sentryInitialized = false;
+
+/**
+ * Initialize Sentry for test failure reporting
+ * Uses same configuration as lib/sentry.js for consistency
+ */
+function initializeSentry() {
+  if (sentryInitialized) return;
+  
+  // Respect telemetry opt-out
+  if (process.env.TD_TELEMETRY === "false") {
+    return;
+  }
+
+  try {
+    const version = resolveTestDriverVersion() || "unknown";
+    
+    Sentry.init({
+      dsn:
+        process.env.SENTRY_DSN ||
+        "https://452bd5a00dbd83a38ee8813e11c57694@o4510262629236736.ingest.us.sentry.io/4510480443637760",
+      environment: "vitest",
+      release: `testdriverai@${version}`,
+      sampleRate: 1.0,
+      tracesSampleRate: 1.0,
+      enableLogs: true,
+      integrations: [Sentry.httpIntegration(), Sentry.nodeContextIntegration()],
+      initialScope: {
+        tags: {
+          platform: os.platform(),
+          arch: os.arch(),
+          nodeVersion: process.version,
+          runner: "vitest",
+        },
+      },
+      // Filter out events that should not be reported to Sentry
+      beforeSend(event, hint) {
+        const error = hint.originalException;
+        
+        // Don't send user-cancelled errors
+        if (error && error.message && error.message.includes("User cancelled")) {
+          return null;
+        }
+        
+        // Don't send test failures - these are expected behavior, not bugs in the SDK
+        // Test failures indicate the test found a problem, which is the intended use case
+        if (event.exception?.values) {
+          for (const exception of event.exception.values) {
+            // Filter out TestFailure type (from Vitest test failures)
+            if (exception.type === "TestFailure") {
+              return null;
+            }
+            
+            // Filter out common user code errors (ReferenceError, TypeError from user tests)
+            // Only report if the error originates from TestDriver SDK code, not user test code
+            const isUserCodeError = exception.stacktrace?.frames?.some(frame => {
+              const filename = frame.filename || frame.abs_path || "";
+              // Check if error is from user test files (not from SDK internals)
+              return filename.includes("/tests/") || 
+                     filename.includes("/test/") || 
+                     filename.includes(".test.") ||
+                     filename.includes(".spec.");
+            });
+            
+            if (isUserCodeError && (exception.type === "ReferenceError" || exception.type === "TypeError")) {
+              return null;
+            }
+          }
+        }
+        
+        return event;
+      },
+    });
+    
+    sentryInitialized = true;
+    logger.debug("Sentry initialized for vitest");
+  } catch (err) {
+    // Sentry init failed - continue without it
+    logger.debug("Failed to initialize Sentry:", err.message);
+  }
+}
+
+/**
+ * Flush Sentry events before process exit
+ * @param {number} [timeout=2000] - Timeout in ms
+ */
+async function flushSentry(timeout = 2000) {
+  if (!sentryInitialized) return;
+  try {
+    await Sentry.flush(timeout);
+  } catch (err) {
+    // Ignore flush errors
+  }
+}
 
 /**
  * Resolve the TestDriver SDK version using multiple strategies.
@@ -710,6 +810,9 @@ class TestDriverReporter {
     this.ctx = ctx;
     logger.debug("onInit called - UPDATED VERSION");
 
+    // Initialize Sentry for error reporting
+    initializeSentry();
+
     // Store project root for making file paths relative
     pluginState.projectRoot = ctx.config.root || process.cwd();
     logger.debug("Project root:", pluginState.projectRoot);
@@ -936,6 +1039,9 @@ class TestDriverReporter {
     } catch (error) {
       logger.error("Failed to complete test run:", error.message);
       logger.debug("Error stack:", error.stack);
+    } finally {
+      // Flush any pending Sentry events before process exits
+      await flushSentry();
     }
   }
 
@@ -1028,11 +1134,18 @@ class TestDriverReporter {
         const error = result.errors[0];
         errorMessage = error.message;
         errorStack = error.stack;
+        
+        // Note: We do NOT report test failures to Sentry.
+        // Test failures are expected behavior (they indicate a test found a bug).
+        // We only want actual SDK crashes and exceptions reported to Sentry.
       }
 
       const suiteName = test.suite?.name;
       const startTime = Date.now() - duration; // Calculate start time from duration
-      const retryCount = result.retryCount || 0;
+      // In Vitest v4, retryCount is on diagnostic(), not result()
+      // result() only returns { state, errors }, while diagnostic() has retryCount, duration, etc.
+      const diagnostic = test.diagnostic?.();
+      const retryCount = diagnostic?.retryCount || 0;
       const testRunDbId = process.env.TD_TEST_RUN_DB_ID;
       const consoleUrl = getConsoleUrl(pluginState.apiRoot);
       const hasRetries = retryCount > 0 && dashcamUrls.length > 1;
@@ -1189,13 +1302,30 @@ function calculateStatsFromModules(testModules) {
   let failedTests = 0;
   let skippedTests = 0;
 
+  // Guard against corrupt or circular test tree structures
+  // (can happen with --sequence.concurrent in some Vitest versions)
+  const seen = new Set();
+
   for (const testModule of testModules) {
-    for (const testCase of testModule.children.allTests()) {
-      totalTests++;
-      const result = testCase.result();
-      if (result.state === "passed") passedTests++;
-      else if (result.state === "failed") failedTests++;
-      else if (result.state === "skipped") skippedTests++;
+    try {
+      for (const testCase of testModule.children.allTests()) {
+        // Deduplicate - skip if we've already counted this test
+        if (seen.has(testCase.id)) continue;
+        seen.add(testCase.id);
+
+        const result = testCase.result();
+        if (result.state === "passed") {
+          passedTests++;
+          totalTests++;
+        } else if (result.state === "failed") {
+          failedTests++;
+          totalTests++;
+        } else if (result.state === "skipped") {
+          skippedTests++;
+        }
+      }
+    } catch (err) {
+      logger.warn(`Error calculating stats for module: ${err.message}`);
     }
   }
 

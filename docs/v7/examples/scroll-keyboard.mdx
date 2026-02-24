@@ -12,7 +12,7 @@ Watch this test execute in a real sandbox environment:
 
 {/* scroll-keyboard.test.mjs output */}
 <iframe 
-  src="https://testdriver-api.onrender.com/api/v1/testdriver/testcase/698d169fa2aa03cd95d96b35/replay" 
+  src="https://testdriver-api.onrender.com/api/v1/testdriver/testcase/699cf273bdc9b421c706da04/replay" 
   width="100%" 
   height="390" 
   style={{ border: "1px solid #333", borderRadius: "8px" }}
@@ -38,7 +38,7 @@ describe("Scroll Keyboard Test", () => {
     // Navigate to https://www.webhamster.com/
     await testdriver.focusApplication("Google Chrome");
     const urlBar = await testdriver.find(
-      "testdriver-sandbox.vercel.app/login, the URL in the omnibox showing the current page",
+      "testdriver-sandbox.vercel.app/login, the URL in the omnibox showing the current page", {zoom: true}
     );
     await urlBar.click();
     await testdriver.pressKeys(["ctrl", "a"]);

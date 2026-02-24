@@ -376,6 +376,15 @@ class SDKLogFormatter {
     }
     if (meta.cacheHit) {
       metaParts.push(chalk.bold.yellow("⚡ cached"));
+      if (meta.validated) {
+        const confStr = meta.validationConfidence !== null && meta.validationConfidence !== undefined
+          ? ` ${(meta.validationConfidence * 100).toFixed(1)}%`
+          : '';
+        metaParts.push(chalk.green(`✅ validated${confStr}`));
+        if (meta.coordsUpdated) {
+          metaParts.push(chalk.dim.yellow(`↗ coords shifted`));
+        }
+      }
     }
     if (meta.confidence !== undefined && meta.confidence !== null) {
       metaParts.push(chalk.dim.gray(`confidence: ${meta.confidence}`));
@@ -467,6 +476,46 @@ class SDKLogFormatter {
       parts.push(this.joinMetaParts(metaParts));
     }
 
+    return parts.join(" ");
+  }
+
+  /**
+   * Format a single-line findAll message (combines finding + result) 🔎
+   * @param {string} description - Element description
+   * @param {number} count - Number of elements found
+   * @param {Object} meta - Metadata (duration, cache hit)
+   * @returns {string} Formatted message
+   */
+  formatFindAllSingleLine(description, count, meta = {}) {
+    const parts = [];
+    this.addTimestamp(parts);
+    parts.push(this.getPrefix("findAll"));
+    parts.push(chalk.bold.magenta("Finding All"));
+    parts.push(chalk.cyan(`"${description}"`));
+    
+    const metaParts = [];
+    
+    // Add count with appropriate coloring
+    if (count > 0) {
+      metaParts.push(chalk.green(`found ${count}`));
+    } else {
+      metaParts.push(chalk.yellow("found 0"));
+    }
+    
+    // Add cache hit indicator
+    if (meta.cacheHit) {
+      metaParts.push(chalk.bold.yellow("⚡ cached"));
+    }
+    
+    // Add duration
+    if (meta.duration) {
+      metaParts.push(this.formatDurationColored(meta.duration));
+    }
+    
+    if (metaParts.length > 0) {
+      parts.push(this.joinMetaParts(metaParts));
+    }
+    
     return parts.join(" ");
   }
 
@@ -931,6 +980,171 @@ class SDKLogFormatter {
     parts.push(this.formatDurationColored(durationMs, "default"));
     
     return parts.join(" ");
+  }
+
+  /**
+   * Format act() start message - provides visual scope boundary
+   * @param {string} task - The task being executed
+   * @returns {string} Formatted act start message
+   */
+  formatActStart(task) {
+    const parts = [];
+    this.addTimestamp(parts);
+    parts.push(this.getPrefix("action"));
+    parts.push(chalk.bold.cyan("Act"));
+    parts.push(chalk.cyan(`"${task}"`));
+    return parts.join(" ");
+  }
+
+  /**
+   * Format act() completion message - provides visual scope boundary
+   * @param {number} durationMs - Duration in milliseconds
+   * @param {boolean} success - Whether the act completed successfully
+   * @param {string} [error] - Error message if failed
+   * @returns {string} Formatted act complete message
+   */
+  formatActComplete(durationMs, success, error = null) {
+    const parts = [];
+    this.addTimestamp(parts);
+    parts.push(this.getResultPrefix());
+    
+    if (success) {
+      parts.push(chalk.green("complete"));
+    } else {
+      parts.push(chalk.red("failed"));
+      if (error) {
+        parts.push(chalk.dim("·"));
+        parts.push(chalk.red(error));
+      }
+    }
+    
+    parts.push(this.formatDurationColored(durationMs, "default"));
+    
+    return parts.join(" ");
+  }
+
+  /**
+   * Format parse() elements as a formatted table for console output 📋
+   * @param {Array} elements - Array of parsed elements from parse()
+   * @param {Object} options - Formatting options
+   * @param {number} options.maxContentLength - Max length for content column (default: 30)
+   * @param {number} options.maxRows - Max number of rows to display (default: 50)
+   * @returns {string} Formatted table string
+   */
+  formatParseElements(elements, options = {}) {
+    if (!elements || elements.length === 0) {
+      return chalk.dim("  No elements found");
+    }
+
+    const maxContentLength = options.maxContentLength || 30;
+    const maxRows = options.maxRows || 50;
+    
+    // Column widths
+    const idxWidth = 5;
+    const typeWidth = 10;
+    const contentWidth = maxContentLength + 2;
+    const interactWidth = 14;
+    const posWidth = 18;
+    
+    const lines = [];
+    
+    // Header
+    const headerLine = [
+      chalk.bold.cyan(this._padRight("Idx", idxWidth)),
+      chalk.bold.cyan(this._padRight("Type", typeWidth)),
+      chalk.bold.cyan(this._padRight("Content", contentWidth)),
+      chalk.bold.cyan(this._padRight("Interactive", interactWidth)),
+      chalk.bold.cyan("Position"),
+    ].join(chalk.dim(" │ "));
+    
+    lines.push("  " + headerLine);
+    
+    // Separator line
+    const separatorLine = [
+      chalk.dim("─".repeat(idxWidth)),
+      chalk.dim("─".repeat(typeWidth)),
+      chalk.dim("─".repeat(contentWidth)),
+      chalk.dim("─".repeat(interactWidth)),
+      chalk.dim("─".repeat(posWidth)),
+    ].join(chalk.dim("─┼─"));
+    
+    lines.push("  " + separatorLine);
+    
+    // Data rows
+    const displayElements = elements.slice(0, maxRows);
+    for (const el of displayElements) {
+      const idx = String(el.index ?? "?");
+      const type = el.type || "unknown";
+      const content = this._truncate(el.content || "", maxContentLength);
+      
+      // Format interactivity with color
+      // Note: interactivity can be boolean (true/false) or string ("clickable", "non-interactive")
+      let interactivity = el.interactivity || "-";
+      let interactivityDisplay;
+      if (interactivity === "clickable" || interactivity === true) {
+        interactivityDisplay = chalk.green("✓ clickable");
+      } else if (interactivity === false || interactivity === "non-interactive") {
+        interactivityDisplay = chalk.dim("-");
+      } else {
+        interactivityDisplay = chalk.dim(String(interactivity));
+      }
+      
+      // Format position from bbox
+      let position = "-";
+      if (el.bbox) {
+        position = `(${el.bbox.x0}, ${el.bbox.y0})`;
+      }
+      
+      // For interactivity column, we need to pad based on visible text, not chalk codes
+      // "✓ clickable" = 11 chars, "-" = 1 char, so we pad manually after getting visible length
+      const interactPadded = this._padRight(interactivityDisplay, interactWidth);
+      
+      const dataLine = [
+        chalk.yellow(this._padRight(idx, idxWidth)),
+        chalk.white(this._padRight(type, typeWidth)),
+        chalk.gray(this._padRight(content, contentWidth)),
+        interactPadded,
+        chalk.dim(position),
+      ].join(chalk.dim(" │ "));
+      
+      lines.push("  " + dataLine);
+    }
+    
+    // Show truncation message if needed
+    if (elements.length > maxRows) {
+      lines.push(chalk.dim(`  ... and ${elements.length - maxRows} more elements (showing first ${maxRows})`));
+    }
+    
+    return lines.join("\n");
+  }
+
+  /**
+   * Truncate a string to a maximum length with ellipsis
+   * @private
+   * @param {string} str - String to truncate
+   * @param {number} maxLength - Maximum length
+   * @returns {string} Truncated string
+   */
+  _truncate(str, maxLength) {
+    if (!str) return "";
+    // Remove newlines and extra whitespace
+    const cleaned = str.replace(/\s+/g, " ").trim();
+    if (cleaned.length <= maxLength) return cleaned;
+    return cleaned.substring(0, maxLength - 1) + "…";
+  }
+
+  /**
+   * Pad a string to the right to a fixed width
+   * @private
+   * @param {string} str - String to pad
+   * @param {number} width - Target width
+   * @returns {string} Padded string
+   */
+  _padRight(str, width) {
+    // Handle chalk strings by getting visible length
+    const visibleStr = String(str).replace(/\x1b\[[0-9;]*m/g, "");
+    const padding = Math.max(0, width - visibleStr.length);
+    return str + " ".repeat(padding);
   }
 }
 

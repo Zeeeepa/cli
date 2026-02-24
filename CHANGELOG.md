@@ -1,3 +1,125 @@
+## [7.3.37](https://github.com/testdriverai/testdriverai/compare/v7.3.36...v7.3.37) (2026-02-24)
+
+
+
+## [7.3.36](https://github.com/testdriverai/testdriverai/compare/v7.3.35...v7.3.36) (2026-02-24)
+
+
+### Reverts
+
+* Revert "Fix hanging node processes on Ctrl+C (#654)" (#683) ([5e68748](https://github.com/testdriverai/testdriverai/commit/5e6874825c6718e006bbf84e2ba5edae57d173ac)), closes [#654](https://github.com/testdriverai/testdriverai/issues/654) [#683](https://github.com/testdriverai/testdriverai/issues/683)
+
+
+
+## [7.3.35](https://github.com/testdriverai/testdriverai/compare/v7.3.34...v7.3.35) (2026-02-24)
+
+
+
+## [7.3.34](https://github.com/testdriverai/testdriverai/compare/v7.3.33...v7.3.34) (2026-02-24)
+
+
+
+## [7.3.33](https://github.com/testdriverai/testdriverai/compare/v7.3.32...v7.3.33) (2026-02-24)
+
+
+
+## [7.3.32](https://github.com/testdriverai/testdriverai/compare/v7.3.31...v7.3.32) (2026-02-20)
+
+
+
+## [7.3.31](https://github.com/testdriverai/testdriverai/compare/v7.3.30...v7.3.31) (2026-02-20)
+
+
+
+## [7.3.30](https://github.com/testdriverai/testdriverai/compare/v7.3.29...v7.3.30) (2026-02-20)
+
+
+
+## [7.3.29](https://github.com/testdriverai/testdriverai/compare/v7.3.28...v7.3.29) (2026-02-20)
+
+
+
+## [7.3.28](https://github.com/testdriverai/testdriverai/compare/v7.3.27...v7.3.28) (2026-02-20)
+
+
+
+## [7.3.27](https://github.com/testdriverai/testdriverai/compare/v7.3.25...v7.3.27) (2026-02-20)
+
+
+
+## [7.3.26](https://github.com/testdriverai/testdriverai/compare/v7.3.25...v7.3.26) (2026-02-20)
+
+
+
+## [7.3.25](https://github.com/testdriverai/testdriverai/compare/v7.3.24...v7.3.25) (2026-02-20)
+
+
+
+## [7.3.24](https://github.com/testdriverai/testdriverai/compare/v7.3.23...v7.3.24) (2026-02-20)
+
+
+
+## [7.3.23](https://github.com/testdriverai/testdriverai/compare/v7.3.22...v7.3.23) (2026-02-20)
+
+
+
+## [7.3.22](https://github.com/testdriverai/testdriverai/compare/v7.3.21...v7.3.22) (2026-02-19)
+
+
+
+## [7.3.21](https://github.com/testdriverai/testdriverai/compare/v7.3.20...v7.3.21) (2026-02-19)
+
+
+
+## [7.3.20](https://github.com/testdriverai/testdriverai/compare/v7.3.19...v7.3.20) (2026-02-19)
+
+
+
+## [7.3.19](https://github.com/testdriverai/testdriverai/compare/v7.3.17...v7.3.19) (2026-02-19)
+
+
+
+## [7.3.18](https://github.com/testdriverai/testdriverai/compare/v7.3.17...v7.3.18) (2026-02-19)
+
+
+
+## [7.3.17](https://github.com/testdriverai/testdriverai/compare/v7.3.16...v7.3.17) (2026-02-18)
+
+
+### Features
+
+* add type option to find(), move confidence to API, rename ocr to parse ([#640](https://github.com/testdriverai/testdriverai/issues/640)) ([d98a94b](https://github.com/testdriverai/testdriverai/commit/d98a94bd05c135c74d9fed2ebb72c709fc643337))
+
+
+
+## [7.3.16](https://github.com/testdriverai/testdriverai/compare/v7.3.14...v7.3.16) (2026-02-18)
+
+
+
+## [7.3.15](https://github.com/testdriverai/testdriverai/compare/v7.3.14...v7.3.15) (2026-02-18)
+
+
+
+## [7.3.14](https://github.com/testdriverai/testdriverai/compare/v7.3.13...v7.3.14) (2026-02-17)
+
+
+
+## [7.3.13](https://github.com/testdriverai/testdriverai/compare/v7.3.12...v7.3.13) (2026-02-17)
+
+
+
+## [7.3.12](https://github.com/testdriverai/testdriverai/compare/v7.3.11...v7.3.12) (2026-02-17)
+
+
+
+## [7.3.11](https://github.com/testdriverai/testdriverai/compare/v7.3.10...v7.3.11) (2026-02-17)
+
+
+
+## [7.3.10](https://github.com/testdriverai/testdriverai/compare/v7.3.9...v7.3.10) (2026-02-16)
+
+
+
 ## [7.3.9](https://github.com/testdriverai/testdriverai/compare/v7.3.8...v7.3.9) (2026-02-12)
 
 

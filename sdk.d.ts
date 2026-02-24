@@ -228,9 +228,25 @@ export interface TestDriverOptions {
   analytics?: boolean;
   /** Enable console logging output (default: true) */
   logging?: boolean;
-  /** Enable/disable cache (default: true). Set to false to force regeneration on all find operations */
-  cache?: boolean;
-  /** Cache threshold configuration for different methods */
+  /** Enable/disable cache, or configure with thresholds
+   * @example { cache: { enabled: true, thresholds: { find: { screen: 0.05, element: 0.8 }, assert: 0.05 } } }
+   */
+  cache?: boolean | {
+    enabled?: boolean;
+    thresholds?: {
+      /** Thresholds for find operations */
+      find?: {
+        /** Pixel diff threshold for screen comparison (0-1, default 0.05 = 5% diff allowed) */
+        screen?: number;
+        /** OpenCV template match threshold for element matching (0-1, default 0.8 = 80% correlation) */
+        element?: number;
+      };
+      /** Pixel diff threshold for assert operations (0-1, default 0.05 = 5% diff allowed) */
+      assert?: number;
+    };
+  };
+  ai?: AIConfig;
+  /** @deprecated Use cache.thresholds instead */
   cacheThreshold?: {
     /** Threshold for find operations (default: 0.05 = 5% difference, 95% similarity) */
     find?: number;
@@ -270,20 +286,29 @@ export interface TestDriverOptions {
    * Example: 001-click-before-L42-submit-button.png
    */
   autoScreenshots?: boolean;
-  /** Redraw configuration for screen change detection */
+  /** Redraw configuration for screen change detection
+   * @example { redraw: { enabled: true, thresholds: { screen: 0.05, network: true } } }
+   */
   redraw?:
     | boolean
     | {
         /** Enable redraw detection (default: true) */
         enabled?: boolean;
-        /** Pixel difference threshold for redraw detection */
+        /** Threshold configuration */
+        thresholds?: {
+          /** Screen diff threshold (0-1). Set to false to disable screen redraw detection. Default: 0.05 */
+          screen?: number | false;
+          /** Enable/disable network activity monitoring (default: false) */
+          network?: boolean;
+        };
+        /** @deprecated Use thresholds.screen instead */
         diffThreshold?: number;
-        /** Enable screen redraw detection */
+        /** @deprecated Use thresholds.screen !== false instead */
         screenRedraw?: boolean;
-        /** Enable network activity monitoring */
+        /** @deprecated Use thresholds.network instead */
         networkMonitor?: boolean;
       };
-  /** @deprecated Use redraw.diffThreshold instead */
+  /** @deprecated Use redraw option instead */
   redrawThreshold?: number | object;
   /** Additional environment variables */
   environment?: Record<string, any>;
@@ -364,8 +389,8 @@ export interface HoverResult {
   [key: string]: any;
 }
 
-/** Bounding box for an OCR word */
-export interface OCRBoundingBox {
+/** Bounding box for a parsed element (pixel coordinates) */
+export interface ParsedElementBBox {
   /** Left edge X coordinate */
   x0: number;
   /** Top edge Y coordinate */
@@ -376,24 +401,36 @@ export interface OCRBoundingBox {
   y1: number;
 }
 
-/** Individual word extracted by OCR */
-export interface OCRWord {
-  /** The text content of the word */
-  content: string;
-  /** Confidence score for this word (0-100) */
-  confidence: number;
-  /** Bounding box coordinates */
-  bbox: OCRBoundingBox;
+/** Bounding box as {left, top, width, height} */
+export interface ParsedElementBoundingBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
 }
 
-/** Result from OCR text extraction */
-export interface OCRResult {
-  /** Array of extracted words with positions */
-  words: OCRWord[];
-  /** All text concatenated with spaces */
-  fullText: string;
-  /** Overall OCR confidence (0-100) */
-  confidence: number;
+/** Individual element detected by OmniParser */
+export interface ParsedElement {
+  /** Element index */
+  index: number;
+  /** Element type (e.g. "text", "icon", "button") */
+  type: string;
+  /** Text content or description */
+  content: string;
+  /** Interactivity level (e.g. "clickable", "non-interactive") */
+  interactivity: string;
+  /** Bounding box in pixel coordinates */
+  bbox: ParsedElementBBox;
+  /** Bounding box as {left, top, width, height} */
+  boundingBox: ParsedElementBoundingBox;
+}
+
+/** Result from OmniParser screen analysis */
+export interface ParseResult {
+  /** Array of detected UI elements */
+  elements: ParsedElement[];
+  /** URL of the annotated screenshot */
+  annotatedImageUrl: string;
   /** Width of the analyzed screenshot */
   imageWidth: number;
   /** Height of the analyzed screenshot */
@@ -546,6 +583,19 @@ export interface FocusApplicationOptions {
   name: string;
 }
 
+/** AI sampling configuration for controlling model behavior */
+export interface AIConfig {
+  /** Temperature for AI sampling (0 = deterministic, higher = more creative). Default: 0 for find verification, model default for assert. */
+  temperature?: number;
+  /** Top-P and Top-K sampling parameters */
+  top?: {
+    /** Top-P (nucleus sampling). Controls diversity by limiting to top P probability mass. Range: 0-1. */
+    p?: number;
+    /** Top-K sampling. Limits choices to top K tokens. 1 = always pick most likely. 0 = disabled. */
+    k?: number;
+  };
+}
+
 /** Options for extract command */
 export interface ExtractOptions {
   /** What to extract */
@@ -564,6 +614,8 @@ export interface AssertOptions {
   os?: string;
   /** Screen resolution for cache partitioning */
   resolution?: string;
+  /** AI sampling configuration (overrides global ai config) */
+  ai?: AIConfig;
 }
 
 /** Options for exec command */
@@ -694,7 +746,7 @@ export class Element {
   /**
    * Find the element on screen
    * @param newDescription - Optional new description to search for
-   * @param cacheThreshold - Cache threshold for this specific find (overrides global setting)
+   * @param options - Cache options: number for threshold, or object with cache.thresholds
    */
   find(newDescription?: string, cacheThreshold?: number): Promise<Element>;
 
@@ -1004,7 +1056,7 @@ export default class TestDriverSDK {
    * Automatically locates the element and returns it
    *
    * @param description - Description of the element to find
-   * @param options - Cache threshold (number) or options object
+   * @param options - Cache threshold (number) or options object with cache.thresholds
    * @returns Chainable promise that resolves to Element instance
    *
    * @example
@@ -1017,8 +1069,10 @@ export default class TestDriverSDK {
    * await element.click();
    *
    * @example
-   * // Find with custom cache threshold
-   * const element = await client.find('login button', 0.01);
+   * // Find with custom cache thresholds
+   * const element = await client.find('login button', {
+   *   cache: { thresholds: { screen: 0.05, element: 0.9 } }
+   * });
    *
    * @example
    * // Poll for element with timeout (retries every 5 seconds)
@@ -1028,7 +1082,7 @@ export default class TestDriverSDK {
   find(description: string, cacheThreshold?: number): ChainableElementPromise;
   find(
     description: string,
-    options?: { cacheThreshold?: number; cacheKey?: string; timeout?: number },
+    options?: { cacheThreshold?: number; cacheKey?: string; timeout?: number; confidence?: number; type?: "text" | "image" | "ui" | "any"; ai?: AIConfig; cache?: { thresholds?: { screen?: number; element?: number } } },
   ): ChainableElementPromise;
 
   /**
@@ -1043,9 +1097,13 @@ export default class TestDriverSDK {
    *
    * @example
    * // Find with custom cache threshold
-   * const items = await client.findAll('list item', 0.01);
+   * const items = await client.findAll('list item', 0.05);
    */
   findAll(description: string, cacheThreshold?: number): Promise<Element[]>;
+  findAll(
+    description: string,
+    options?: { cacheThreshold?: number; cacheKey?: string; cache?: { thresholds?: { screen?: number } } },
+  ): Promise<Element[]>;
 
   // Text Interaction Methods
 
@@ -1265,9 +1323,9 @@ export default class TestDriverSDK {
    *
    * @example
    * // With custom threshold
-   * await client.assert('the page loaded', { threshold: 0.01, cacheKey: 'login-test' });
+   * await client.assert('the page loaded', { threshold: 0.05, cacheKey: 'login-test' });
    */
-  assert(assertion: string, options?: { threshold?: number; cacheKey?: string; os?: string; resolution?: string }): Promise<boolean>;
+  assert(assertion: string, options?: { threshold?: number; cacheKey?: string; os?: string; resolution?: string; ai?: AIConfig }): Promise<boolean>;
 
   /**
    * Extract information from the screen using AI
@@ -1326,32 +1384,28 @@ export default class TestDriverSDK {
   screenshot(filename?: string): Promise<string>;
 
   /**
-   * Extract all visible text from the current screen using OCR (Tesseract)
-   * Returns structured data with text content, bounding boxes, and confidence scores
+   * Parse the current screen using OmniParser v2 to detect all UI elements
+   * Returns structured data with element types, bounding boxes, and content
+   * Requires enterprise or self-hosted plan.
    *
-   * @returns OCR extraction result with words, positions, and confidence
-   *
-   * @example
-   * // Get all text on screen
-   * const result = await testdriver.ocr();
-   * console.log(result.fullText);
+   * @returns Parsed screen elements with positions and types
    *
    * @example
-   * // Find and click text
-   * const result = await testdriver.ocr();
-   * const submit = result.words.find(w => w.content === 'Submit');
-   * if (submit) {
-   *   const x = (submit.bbox.x0 + submit.bbox.x1) / 2;
-   *   const y = (submit.bbox.y0 + submit.bbox.y1) / 2;
-   *   await testdriver.click({ x, y });
-   * }
+   * // Get all elements on screen
+   * const result = await testdriver.parse();
+   * console.log(`Found ${result.elements.length} elements`);
    *
    * @example
-   * // Check if text exists
-   * const result = await testdriver.ocr();
-   * const hasError = result.words.some(w => w.content.toLowerCase().includes('error'));
+   * // Find clickable elements
+   * const result = await testdriver.parse();
+   * const clickable = result.elements.filter(e => e.interactivity === 'clickable');
+   *
+   * @example
+   * // Find text content
+   * const result = await testdriver.parse();
+   * const textElements = result.elements.filter(e => e.type === 'text');
    */
-  ocr(): Promise<OCRResult>;
+  parse(): Promise<ParseResult>;
 
   /**
    * Wait for specified time
