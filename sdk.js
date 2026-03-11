@@ -4,8 +4,14 @@ const os = require("os");
 const crypto = require("crypto");
 const { formatter } = require("./sdk-log-formatter");
 
-// Load .env file into process.env by default
-require("dotenv").config();
+// Load .env — use monorepo root .env when running inside the monorepo,
+// otherwise fall back to default dotenv.config() for end users.
+const _isMonorepo = __dirname.includes(require('path').join('mono', 'sdk'));
+if (_isMonorepo) {
+  require('../shared/load-env');
+} else {
+  require('dotenv').config();
+}
 
 /**
  * Get the file path of the caller (the file that called TestDriver)
@@ -436,8 +442,10 @@ class Element {
    * @returns {Promise<Element>} This element instance
    */
   async find(newDescription, options) {
-    // Handle timeout/polling option
-    const timeout = typeof options === "object" ? options?.timeout : null;
+    // Handle timeout/polling option (default: 30s)
+    const timeout = typeof options === "object" && options?.timeout !== undefined
+      ? options.timeout
+      : 10000;
     if (timeout && timeout > 0) {
       return this._findWithTimeout(newDescription, options, timeout);
     }
@@ -455,7 +463,7 @@ class Element {
     let findError = null;
 
     const debugMode =
-      process.env.VERBOSE || process.env.DEBUG || process.env.TD_DEBUG;
+      process.env.VERBOSE || process.env.TD_DEBUG;
 
     // Log finding action
     const { events } = require("./agent/events.js");
@@ -615,11 +623,10 @@ class Element {
 
     // Track find interaction once at the end (fire-and-forget, don't block)
     const sessionId = this.sdk.getSessionId();
-    if (sessionId && this.sdk.sandbox?.send) {
-      await this.sdk.sandbox
-        .send({
-          type: "trackInteraction",
-          interactionType: "find",
+    if (sessionId && this.sdk.apiClient) {
+      this.sdk.apiClient
+        .req("interaction/track", {
+          type: "find",
           session: sessionId,
           prompt: description,
           timestamp: absoluteTimestamp, // Absolute epoch timestamp - frontend calculates relative using clientStartDate
@@ -667,7 +674,7 @@ class Element {
 
     // Create options without timeout to avoid infinite recursion
     const findOptions = typeof options === "object" ? { ...options } : {};
-    delete findOptions.timeout;
+    findOptions.timeout = 0;
 
     let attempts = 0;
     while (Date.now() - startTime < timeout) {
@@ -723,7 +730,7 @@ class Element {
 
     // Only keep base64 data in DEBUG mode
     const debugMode =
-      process.env.VERBOSE || process.env.DEBUG || process.env.TD_DEBUG;
+      process.env.VERBOSE || process.env.TD_DEBUG;
     if (debugMode) {
       return response;
     }
@@ -777,7 +784,7 @@ class Element {
 
     // Log cache information in debug mode
     const debugMode =
-      process.env.VERBOSE || process.env.DEBUG || process.env.TD_DEBUG;
+      process.env.VERBOSE || process.env.TD_DEBUG;
     if (debugMode) {
       const { events } = require("./agent/events.js");
       this.sdk.emitter.emit(events.log.debug, "Element Found:");
@@ -1433,7 +1440,7 @@ class TestDriverSDK {
     // Set up environment with API key
     const environment = {
       TD_API_KEY: resolvedApiKey,
-      TD_API_ROOT: options.apiRoot || "https://testdriver-api.onrender.com",
+      TD_API_ROOT: options.apiRoot || "https://api.testdriver.ai",
       TD_RESOLUTION: options.resolution || "1366x768",
       TD_ANALYTICS: options.analytics !== false,
       TD_PREVIEW: previewMode,
@@ -1483,6 +1490,9 @@ class TestDriverSDK {
 
     // Store IP address if provided for direct connection
     this.ip = options.ip || null;
+
+    // Store EC2 instance ID for direct connections (used to provision Ably credentials via SSM)
+    this.instanceId = options.instanceId || null;
 
     // Store sandbox configuration options
     this.sandboxAmi = options.sandboxAmi || null;
@@ -1601,6 +1611,10 @@ class TestDriverSDK {
     // Set up logging if enabled (after emitter is exposed)
     this.loggingEnabled = options.logging !== false;
 
+    // Log buffer: structured entries collected during test execution.
+    // Uploaded to S3 at cleanup so they can be displayed alongside dashcam replays.
+    this._logBuffer = [];
+
     // Set up event listeners once (they live for the lifetime of the SDK instance)
     this._setupLogging();
 
@@ -1617,7 +1631,7 @@ class TestDriverSDK {
     // Auto-screenshots configuration
     // When enabled, automatically captures screenshots before/after each command
     // Screenshots are saved to .testdriver/screenshots/<test>/ with descriptive names
-    this.autoScreenshots = options.autoScreenshots !== false;
+    this.autoScreenshots = options.autoScreenshots === true;
     this._screenshotSequence = 0; // Counter for sequential screenshot naming
 
     // Set up command methods that lazy-await connection
@@ -1726,6 +1740,8 @@ class TestDriverSDK {
    */
   async _waitForChromeDebuggerReady(timeoutMs = 60000) {
     const shell = this.os === "windows" ? "pwsh" : "sh";
+    // PowerShell: Use async connect with 2-second timeout to match Linux curl behavior.
+    // TcpClient.Connect() is synchronous and can hang indefinitely, causing exec timeouts.
     const portCheckCmd = this.os === "windows"
       ? `$tcp = New-Object System.Net.Sockets.TcpClient; $tcp.Connect('127.0.0.1', 9222); $tcp.Close(); echo 'open'`
       : `curl -s -o /dev/null --connect-timeout 2 http://localhost:9222 2>/dev/null && echo 'open' || echo 'closed'`;
@@ -1855,6 +1871,8 @@ class TestDriverSDK {
           "--no-first-run",
           "--no-experiments",
           "--disable-infobars",
+          "--disable-features=StartupBrowserCreator",
+          "--disable-features=ChromeWhatsNewUI",
           `--user-data-dir=${userDataDir}`,
         );
 
@@ -1892,7 +1910,7 @@ class TestDriverSDK {
         // Add web log tracking with domain wildcard pattern, then start dashcam
         if (this.dashcamEnabled) {
           const domainPattern = this._getUrlDomainPattern(url);
-          await this.dashcam.addWebLog(domainPattern, "Web Logs");
+          // await this.dashcam.addWebLog(domainPattern, "Web Logs");
           
           // Start dashcam recording after logs are configured
           if (!(await this.dashcam.isRecording())) {
@@ -2459,7 +2477,7 @@ with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
           const pattern = this._provisionedChromeUrl
             ? this._getUrlDomainPattern(this._provisionedChromeUrl)
             : "**";
-          await this.dashcam.addWebLog(pattern, "Web Logs");
+          // await this.dashcam.addWebLog(pattern, "Web Logs");
         }
 
         // Start recording if not already recording
@@ -2763,6 +2781,13 @@ CAPTCHA_SOLVER_EOF`,
     } else if (this.ip) {
       this.agent.ip = this.ip;
     }
+    // Use instanceId from connectOptions if provided, otherwise fall back to constructor value
+    // This allows the API to provision Ably credentials via SSM for direct connections
+    if (connectOptions.instanceId !== undefined) {
+      this.agent.instanceId = connectOptions.instanceId;
+    } else if (this.instanceId) {
+      this.agent.instanceId = this.instanceId;
+    }
     // Use sandboxAmi from connectOptions if provided, otherwise fall back to constructor value
     if (connectOptions.sandboxAmi !== undefined) {
       this.agent.sandboxAmi = connectOptions.sandboxAmi;
@@ -2863,14 +2888,7 @@ CAPTCHA_SOLVER_EOF`,
       }
     }
 
-    // Release our reference to the shared debugger server.
-    // The server only actually stops when the last concurrent test disconnects.
-    try {
-      const { releaseDebugger } = require("./agent/lib/debugger-server.js");
-      releaseDebugger();
-    } catch (err) {
-      // Ignore if debugger wasn't started
-    }
+
 
     // Always close the sandbox WebSocket connection to clean up resources
     // This ensures we don't leave orphaned connections even if connect() failed
@@ -3101,7 +3119,7 @@ CAPTCHA_SOLVER_EOF`,
 
       // Debug log threshold
       const debugMode =
-        process.env.VERBOSE || process.env.DEBUG || process.env.TD_DEBUG;
+        process.env.VERBOSE || process.env.TD_DEBUG;
       if (debugMode) {
         const autoGenMsg =
           this._autoGeneratedCacheKey && cacheKey === this.options.cacheKey
@@ -3159,7 +3177,7 @@ CAPTCHA_SOLVER_EOF`,
 
           // Only store screenshot in DEBUG mode
           const debugMode =
-            process.env.VERBOSE || process.env.DEBUG || process.env.TD_DEBUG;
+            process.env.VERBOSE || process.env.TD_DEBUG;
           if (debugMode) {
             element._screenshot = screenshot;
           }
@@ -3169,11 +3187,10 @@ CAPTCHA_SOLVER_EOF`,
 
         // Track successful findAll interaction (fire-and-forget, don't block)
         const sessionId = this.getSessionId();
-        if (sessionId && this.sandbox?.send) {
-          this.sandbox
-            .send({
-              type: "trackInteraction",
-              interactionType: "findAll",
+        if (sessionId && this.apiClient) {
+          this.apiClient
+            .req("interaction/track", {
+              type: "findAll",
               session: sessionId,
               prompt: description,
               timestamp: absoluteTimestamp, // Absolute epoch timestamp - frontend calculates relative using clientStartDate
@@ -3190,7 +3207,7 @@ CAPTCHA_SOLVER_EOF`,
         }
 
         // Log debug information when elements are found
-        if (process.env.VERBOSE || process.env.DEBUG || process.env.TD_DEBUG) {
+        if (process.env.VERBOSE || process.env.TD_DEBUG) {
           this.emitter.emit(
             events.log.debug,
             `✓ Found ${elements.length} element(s): "${description}"`,
@@ -3225,11 +3242,10 @@ CAPTCHA_SOLVER_EOF`,
 
         // No elements found - track interaction (fire-and-forget, don't block)
         const sessionId = this.getSessionId();
-        if (sessionId && this.sandbox?.send) {
-          this.sandbox
-            .send({
-              type: "trackInteraction",
-              interactionType: "findAll",
+        if (sessionId && this.apiClient) {
+          this.apiClient
+            .req("interaction/track", {
+              type: "findAll",
               session: sessionId,
               prompt: description,
               timestamp: absoluteTimestamp, // Absolute epoch timestamp - frontend calculates relative using clientStartDate
@@ -3270,11 +3286,10 @@ CAPTCHA_SOLVER_EOF`,
 
       // Track findAll error interaction (fire-and-forget, don't block)
       const sessionId = this.getSessionId();
-      if (sessionId && this.sandbox?.send) {
-        this.sandbox
-          .send({
-            type: "trackInteraction",
-            interactionType: "findAll",
+      if (sessionId && this.apiClient) {
+        this.apiClient
+          .req("interaction/track", {
+            type: "findAll",
             session: sessionId,
             prompt: description,
             timestamp: absoluteTimestamp, // Absolute epoch timestamp - frontend calculates relative using clientStartDate
@@ -3306,7 +3321,7 @@ CAPTCHA_SOLVER_EOF`,
    */
   _sanitizeResponseForElement(response, elementData) {
     const debugMode =
-      process.env.VERBOSE || process.env.DEBUG || process.env.TD_DEBUG;
+      process.env.VERBOSE || process.env.TD_DEBUG;
 
     // Combine global response data with element-specific data
     const sanitized = {
@@ -3718,7 +3733,7 @@ CAPTCHA_SOLVER_EOF`,
       fs.writeFileSync(filePath, buffer);
 
       // Debug log in verbose mode
-      const debugMode = process.env.VERBOSE || process.env.DEBUG || process.env.TD_DEBUG;
+      const debugMode = process.env.VERBOSE || process.env.TD_DEBUG;
       if (debugMode) {
         this.emitter.emit("log:debug", `📸 Auto-screenshot: ${filename}`);
       }
@@ -3726,7 +3741,7 @@ CAPTCHA_SOLVER_EOF`,
       return filePath;
     } catch (error) {
       // Don't fail the command if screenshot fails
-      const debugMode = process.env.VERBOSE || process.env.DEBUG || process.env.TD_DEBUG;
+      const debugMode = process.env.VERBOSE || process.env.TD_DEBUG;
       if (debugMode) {
         this.emitter.emit("log:debug", `Failed to save auto-screenshot: ${error.message}`);
       }
@@ -3790,14 +3805,14 @@ CAPTCHA_SOLVER_EOF`,
     // Track the last fatal error message to throw on exit
     let lastFatalError = null;
     const debugMode =
-      process.env.VERBOSE || process.env.DEBUG || process.env.TD_DEBUG;
+      process.env.VERBOSE || process.env.TD_DEBUG;
 
     // Set up markdown logger
     createMarkdownLogger(this.emitter);
 
     // Set up basic event logging
     // Note: We only console.log here - the console spy in vitest/hooks.mjs
-    // handles forwarding to sandbox. This prevents duplicate output to server.
+    // handles forwarding to the local log buffer.
     this.emitter.on("log:**", (message) => {
       const event = this.emitter.event;
 
@@ -3812,6 +3827,21 @@ CAPTCHA_SOLVER_EOF`,
           : message;
         console.log(prefixedMessage);
       }
+
+      // Buffer structured SDK log for later upload
+      if (message) {
+        const level = event === events.log.warn ? "warn"
+          : event === events.log.debug ? "debug"
+          : "info";
+        this._logBuffer.push({
+          time: Date.now(),
+          line: String(message),
+          level,
+          source: "sdk",
+          event,
+          logFile: "sdk",
+        });
+      }
     });
 
     this.emitter.on("error:**", (data) => {
@@ -3824,11 +3854,33 @@ CAPTCHA_SOLVER_EOF`,
           lastFatalError = data;
         }
       }
+
+      // Buffer error events for later upload
+      this._logBuffer.push({
+        time: Date.now(),
+        line: `${this.emitter.event}: ${data}`,
+        level: "error",
+        source: "sdk",
+        event: this.emitter.event,
+        logFile: "sdk",
+      });
     });
 
     this.emitter.on("status", (message) => {
       if (this.loggingEnabled) {
         console.log(`- ${message}`);
+      }
+
+      // Buffer status events
+      if (message) {
+        this._logBuffer.push({
+          time: Date.now(),
+          line: `- ${message}`,
+          level: "info",
+          source: "sdk",
+          event: "status",
+          logFile: "sdk",
+        });
       }
     });
 
@@ -3897,14 +3949,8 @@ CAPTCHA_SOLVER_EOF`,
    * @private
    */
   async _initializeDebugger() {
-    // Use reference-counted debugger server so concurrent tests share one
-    // server and it only shuts down when the last test disconnects.
-    const { acquireDebugger } = require("./agent/lib/debugger-server.js");
-
-    if (!this.agent.debuggerUrl) {
-      const result = await acquireDebugger(this.config, this.emitter);
-      this.agent.debuggerUrl = result.url || null;
-    }
+    // Debugger UI is now hosted on the web app (console.testdriver.ai/debugger/)
+    // No local debugger server needed — the agent builds the URL at render time.
   }
 
   // ====================================
@@ -4205,6 +4251,26 @@ CAPTCHA_SOLVER_EOF`,
    */
   async ai(task, options) {
     return await this.act(task, options);
+  }
+
+  /**
+   * Get buffered logs as a JSONL string for upload.
+   * Each line is a JSON object with { time, line, level, source, event }.
+   * @returns {string} JSONL-formatted log data
+   */
+  getLogs() {
+    if (this._logBuffer.length === 0) return "";
+    const startTime = this._logBuffer[0].time;
+    return this._logBuffer
+      .map((entry) => JSON.stringify({ ...entry, time: entry.time - startTime }))
+      .join("\n");
+  }
+
+  /**
+   * Clear the internal log buffer.
+   */
+  clearLogs() {
+    this._logBuffer = [];
   }
 }
 

@@ -48,7 +48,7 @@ if (isSentryEnabled()) {
       process.env.SENTRY_DSN ||
       "https://452bd5a00dbd83a38ee8813e11c57694@o4510262629236736.ingest.us.sentry.io/4510480443637760",
     environment: "mcp",
-    release: `testdriverai-mcp@${version}`,
+    release: version,
     sampleRate: 1.0,
     tracesSampleRate: 1.0,
     sendDefaultPii: true,
@@ -520,7 +520,7 @@ Debug mode (connect to existing sandbox):
       logger.debug("session_start: Session created", { sessionId: newSession.sessionId });
 
       // Determine API root
-      const apiRoot = params.apiRoot || process.env.TD_API_ROOT || "https://testdriver-api.onrender.com";
+      const apiRoot = params.apiRoot || process.env.TD_API_ROOT || "https://api.testdriver.ai";
       logger.debug("session_start: Using API root", { apiRoot });
 
       // Initialize SDK

@@ -218,6 +218,7 @@ const createSDK = (emitter, config, sessionInstance) => {
       method: "post",
       headers: {
         "Content-Type": "application/json",
+        "User-Agent": `TestDriverSDK/${version} (Node.js ${process.version})`,
       },
       timeout: 15000, // 15 second timeout for auth requests
       data: {
@@ -309,9 +310,22 @@ const createSDK = (emitter, config, sessionInstance) => {
       return rateLimitError;
     }
 
+    // Forbidden (403) - likely Cloudflare or WAF blocking the request
+    if (status === 403) {
+      const forbiddenError = new Error(
+        "Request blocked (HTTP 403). This may be caused by a firewall or bot protection. " +
+        "If this persists, please contact support."
+      );
+      forbiddenError.code = "REQUEST_BLOCKED";
+      forbiddenError.isForbiddenError = true;
+      forbiddenError.originalError = error;
+      return forbiddenError;
+    }
+
     // Other HTTP errors - return with context
+    const url = error.config?.url || apiRoot;
     const genericError = new Error(
-      `Authentication failed: ${status} ${error.response?.statusText || "Unknown error"}`
+      `Authentication failed: ${status} ${error.response?.statusText || "Unknown error"} (${url})`
     );
     genericError.code = "AUTH_FAILED";
     genericError.originalError = error;
@@ -346,6 +360,74 @@ const createSDK = (emitter, config, sessionInstance) => {
       }
     }
 
+    // ── S3 upload: replace large inline base64 images with S3 keys ──────
+    // If data.image is a large base64 string (>50KB), upload the raw PNG
+    // to S3 via a presigned URL and send only the imageKey instead.
+    // This reduces JSON body size from ~1.3MB to ~60 bytes.
+    const MIN_IMAGE_SIZE = 50_000; // 50KB base64 chars
+    if (
+      data &&
+      typeof data.image === "string" &&
+      data.image.length > MIN_IMAGE_SIZE
+    ) {
+      try {
+        const apiRoot = config["TD_API_ROOT"];
+        const uploadUrlEndpoint = [apiRoot, "api", version, "testdriver", "upload-url"].join("/");
+
+        // Step 1: Get presigned upload URL from API
+        const uploadRes = await axios(uploadUrlEndpoint, {
+          method: "post",
+          headers: {
+            "Content-Type": "application/json",
+            "User-Agent": `TestDriverSDK/${version} (Node.js ${process.version})`,
+            ...(token && { Authorization: `Bearer ${token}` }),
+          },
+          timeout: 15000,
+          data: {
+            session: sessionInstance.get(),
+            contentType: "image/png",
+          },
+        });
+
+        const { uploadUrl, imageKey } = uploadRes.data;
+
+        if (uploadUrl && imageKey) {
+          // Step 2: Upload raw PNG bytes to S3 via presigned PUT URL
+          const base64Data = data.image.replace(/^data:image\/\w+;base64,/, "");
+          const pngBuffer = Buffer.from(base64Data, "base64");
+
+          await axios(uploadUrl, {
+            method: "put",
+            headers: {
+              "Content-Type": "image/png",
+              "Content-Length": pngBuffer.length,
+            },
+            data: pngBuffer,
+            timeout: 30000,
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity,
+          });
+
+          // Step 3: Replace image with imageKey in the request data
+          const savedKB = (data.image.length / 1024).toFixed(0);
+          delete data.image;
+          data.imageKey = imageKey;
+          emitter.emit(events.log?.debug || events.sdk.request, {
+            path,
+            message: `[sdk] uploaded screenshot to S3 (saved ${savedKB}KB inline), imageKey=${imageKey}`,
+          });
+        }
+      } catch (uploadErr) {
+        // Non-fatal: fall back to sending base64 inline
+        // This ensures old API servers without the upload-url endpoint still work
+        emitter.emit(events.log?.debug || events.sdk.request, {
+          path,
+          message: `[sdk] S3 upload failed, falling back to inline base64: ${uploadErr.message}`,
+        });
+      }
+    }
+    // ── End S3 upload ───────────────────────────────────────────────────
+
     emitter.emit(events.sdk.request, {
       path,
     });
@@ -362,6 +444,7 @@ const createSDK = (emitter, config, sessionInstance) => {
       method: "post",
       headers: {
         "Content-Type": "application/json",
+        "User-Agent": `TestDriverSDK/${version} (Node.js ${process.version})`,
         ...(token && { Authorization: `Bearer ${token}` }), // Add the authorization bearer token only if token is set
         ...sentryHeaders, // Add Sentry distributed tracing headers
       },
